@@ -4,9 +4,24 @@ info:
   description: |
     配当金管理アプリ「Morincum」のバックエンドAPIです。
 
-    ## 認証
+    ## 認証方式
+
+    ### cognitoAuth（ログイン済みユーザー）
     Cognito JWTトークンを使用します。
     `Authorization: Bearer <access_token>` ヘッダーに設定してください。
+
+    ### guestAuth（未ログインユーザー）
+    Cognito Identity Poolが発行する匿名トークンを使用します。
+    アプリ起動時に自動で発行されます。
+    stocks系エンドポイントのみアクセス可能です。
+
+    ### iamAuth（バッチ処理・内部API）
+    AWS SigV4署名による認証です。Morincum-batchからの呼び出し専用です。
+
+    ## Morincum-batchとの役割分担
+    - Claude API・Slack Bot・X API連携は Morincum-batch が担当
+    - バックエンドはデータの保存・取得APIの提供のみ行う
+    - バッチはInternal API（iamAuth）経由でRDSを操作する
 
     ## 多言語対応
     `locale` パラメータで `ja`（日本語）または `en`（英語）を指定できます。
@@ -14,9 +29,9 @@ info:
 
     ## エラーレスポンス
     全エンドポイント共通のエラー形式を返します。
-  version: 1.0.0
+  version: 1.10.0
   contact:
-    name: Morincum 開発チーム
+    name: Morincum開発チーム
 
 servers:
   - url: https://api.morincum.com/v1
@@ -45,6 +60,20 @@ tags:
     description: 銘柄マスタ
   - name: logs
     description: 行動ログ送信
+  - name: internal
+    description: |
+      内部バッチ処理用API（IAM認証）
+      Morincum-batchからの呼び出し専用です。
+      Cognitoトークンではなく、AWS SigV4署名による認証を使用します。
+      フロントエンドからはアクセスできません。
+  - name: stats
+    description: バッチ向け統計取得API（IAM認証）
+  - name: news
+    description: AIニュース管理API（IAM認証）
+  - name: xposts
+    description: X投稿管理API（IAM認証）
+  - name: versions
+    description: アプリバージョン確認API
 
 security:
   - cognitoAuth: []
@@ -307,6 +336,7 @@ paths:
     get:
       tags: [users]
       summary: 自分のプロフィール取得
+      description: ログイン中のユーザー情報を取得します。
       responses:
         '200':
           description: ユーザー情報
@@ -320,6 +350,7 @@ paths:
     patch:
       tags: [users]
       summary: プロフィール更新
+      description: ユーザーの属性情報を更新します。
       requestBody:
         required: true
         content:
@@ -343,12 +374,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
     delete:
       tags: [users]
       summary: アカウント削除
+      description: ユーザーアカウントを削除します。この操作は取り消せません。
       responses:
         '200':
           description: 削除成功
@@ -364,6 +398,112 @@ paths:
           $ref: '#/components/responses/Unauthorized'
 
   # ==========================================
+  # プラン情報
+  # ==========================================
+
+  /user/plan:
+    get:
+      tags: [users]
+      summary: プラン情報取得
+      description: |
+        現在のプラン情報を返します。
+        - `plan_id: 'standard'` → is_premium = true（有料ユーザー）
+        - `plan_id: 'free'` → is_premium = false（無料ユーザー）
+      security:
+        - cognitoAuth: []
+      responses:
+        '200':
+          description: プラン情報
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /user/plan/downgrade-message-shown:
+    put:
+      tags: [users]
+      summary: ダウングレードメッセージ表示済みマーク
+      description: |
+        ダウングレード通知モーダルを閉じた際に呼び出します。
+        `users.has_shown_downgrade_message` を `true` に更新します。
+        以降は同じユーザーに対してモーダルを再表示しません。
+      security:
+        - cognitoAuth: []
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==========================================
+  # サブスクリプション（RevenueCat Webhook）
+  # ==========================================
+
+  /webhooks/revenuecat:
+    post:
+      tags: [users]
+      summary: RevenueCat Webhook受信
+      description: |
+        RevenueCatからのサブスクリプション状態変更イベントを受信します。
+        購入・解約・返金・更新イベントを処理してusersテーブルのis_premiumを更新します。
+
+        ## 受信するイベント
+        - `INITIAL_PURCHASE`：初回購入 → is_premium = true
+        - `RENEWAL`：更新 → is_premium = true（継続）
+        - `CANCELLATION`：解約 → is_premium = false
+        - `EXPIRATION`：有効期限切れ → is_premium = false
+        - `REFUND`：返金 → is_premium = false
+
+        ## 認証
+        RevenueCatのWebhook Secretをヘッダーで検証します。
+        SSMパラメータ：`/morincum/revenuecat/webhook-secret`
+      security: []
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: RevenueCat Webhook Secret
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum: [INITIAL_PURCHASE, RENEWAL, CANCELLATION, EXPIRATION, REFUND]
+                    app_user_id:
+                      type: string
+                      description: CognitoのユーザーID（sub）
+      responses:
+        '200':
+          description: 処理成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
   # ポートフォリオ集計
   # ==========================================
 
@@ -371,6 +511,7 @@ paths:
     get:
       tags: [portfolio]
       summary: ポートフォリオ集計取得
+      description: ユーザーの配当金合計・業界割合・資産種別割合を取得します。
       responses:
         '200':
           description: ポートフォリオ集計
@@ -384,6 +525,9 @@ paths:
     put:
       tags: [portfolio]
       summary: ポートフォリオ集計更新
+      description: |
+        アプリ側で計算した集計値をサーバーに保存します。
+        フロントエンドの `portfolio_summary` テーブルの値を送信してください。
       requestBody:
         required: true
         content:
@@ -394,13 +538,54 @@ paths:
               properties:
                 total_annual_dividend:
                   type: number
+                  description: 年間配当金合計（円）
                   example: 150000
                 sector_breakdown:
                   type: object
-                  example: {金融: 35, テック: 25}
+                  description: 業界別割合（%）
+                  example:
+                    金融: 35
+                    テック: 25
+                    商社: 20
+                    娯楽: 20
                 asset_type_breakdown:
                   type: object
-                  example: {日本株: 50, 米国株: 30, 投資信託: 20}
+                  description: |
+                    資産種別の配当金内訳（円）。
+                    フロントエンドの portfolio_summary テーブルの以下カラムと対応：
+                    - jp_dividend_total
+                    - us_dividend_total
+                    - trust_dividend_total
+                  properties:
+                    jp_dividend_total:
+                      type: number
+                      description: 日本株 配当金合計（円）
+                      example: 80000
+                    us_dividend_total:
+                      type: number
+                      description: 米国株 配当金合計（円換算）
+                      example: 45000
+                    trust_dividend_total:
+                      type: number
+                      description: 投資信託 分配金合計（円）
+                      example: 25000
+                  example:
+                    jp_dividend_total: 80000
+                    us_dividend_total: 45000
+                    trust_dividend_total: 25000
+                holdings_snapshot:
+                  type: array
+                  description: 保有銘柄スナップショット
+                  items:
+                    type: object
+                    properties:
+                      ticker:
+                        type: string
+                      shares:
+                        type: integer
+                      account_type:
+                        type: string
+                        enum: [nisa, tsumitate, tokutei]
       responses:
         '200':
           description: 更新成功
@@ -408,6 +593,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PortfolioSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -415,9 +602,11 @@ paths:
     get:
       tags: [portfolio]
       summary: ポートフォリオ履歴取得
+      description: 月次の配当金合計推移を取得します。
       parameters:
         - name: months
           in: query
+          description: 取得する月数（デフォルト12）
           schema:
             type: integer
             default: 12
@@ -438,8 +627,10 @@ paths:
                         recorded_month:
                           type: string
                           format: date
+                          example: '2026-03-01'
                         total_annual_dividend:
                           type: number
+                          example: 150000
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -451,6 +642,7 @@ paths:
     get:
       tags: [surveys]
       summary: 有効なアンケート取得
+      description: 現在有効なアンケートと設問一覧を取得します。
       parameters:
         - $ref: '#/components/parameters/locale'
       responses:
@@ -467,6 +659,7 @@ paths:
     post:
       tags: [surveys]
       summary: アンケート回答送信
+      description: アンケートへの回答を送信します。
       parameters:
         - name: survey_id
           in: path
@@ -492,6 +685,7 @@ paths:
                         type: string
                         format: uuid
                       answer:
+                        description: 回答内容（単一選択・複数選択・自由入力に対応）
                         oneOf:
                           - type: string
                           - type: array
@@ -500,8 +694,24 @@ paths:
       responses:
         '201':
           description: 回答送信成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 回答を受け付けました
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: 既に回答済み
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   # ==========================================
   # 利用規約・同意管理
@@ -510,36 +720,93 @@ paths:
   /terms/active:
     get:
       tags: [terms]
-      summary: 有効な利用規約取得
+      summary: 有効な利用規約・ポリシー取得
+      description: |
+        現在有効な利用規約とプライバシーポリシーを取得します。
+        フロントエンドの `legal_agreements.terms_version` / `policy_version` の確認に使用します。
       security: []
       parameters:
         - $ref: '#/components/parameters/locale'
       responses:
         '200':
-          description: 利用規約
+          description: 利用規約・ポリシー
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Terms'
+                type: object
+                properties:
+                  terms:
+                    $ref: '#/components/schemas/Terms'
+                    description: 利用規約（type=terms）
+                  policy:
+                    $ref: '#/components/schemas/Terms'
+                    description: プライバシーポリシー（type=policy）
+                  disclaimer:
+                    $ref: '#/components/schemas/Terms'
+                    description: 免責事項（type=disclaimer）。株価データの非公式性・投資判断はユーザー責任
+              example:
+                terms:
+                  id: "uuid-xxx"
+                  version: "v1.2"
+                  type: "terms"
+                  title: "利用規約"
+                  s3_url: "https://s3.ap-northeast-1.amazonaws.com/morincum-assets/terms/v1.2/ja.pdf"
+                policy:
+                  id: "uuid-yyy"
+                  version: "v1.0"
+                  type: "policy"
+                  title: "プライバシーポリシー"
+                  s3_url: "https://s3.ap-northeast-1.amazonaws.com/morincum-assets/policy/v1.0/ja.pdf"
+                disclaimer:
+                  id: "uuid-zzz"
+                  version: "v1.0"
+                  type: "disclaimer"
+                  title: "免責事項"
+                  s3_url: "https://s3.ap-northeast-1.amazonaws.com/morincum-assets/disclaimer/v1.0/ja.pdf"
 
   /terms/consent:
     post:
       tags: [terms]
-      summary: 利用規約への同意
+      summary: 利用規約・ポリシーへの同意
+      description: |
+        利用規約とプライバシーポリシーへの同意を記録します。
+        フロントエンドの `legal_agreements` テーブルへの保存と同時に呼び出してください。
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [terms_id]
+              required: [terms_id, policy_id, disclaimer_id]
               properties:
                 terms_id:
                   type: string
                   format: uuid
+                  description: 同意した利用規約のID
+                policy_id:
+                  type: string
+                  format: uuid
+                  description: 同意したプライバシーポリシーのID
+                disclaimer_id:
+                  type: string
+                  format: uuid
+                  description: 同意した免責事項のID
       responses:
         '201':
           description: 同意記録成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 利用規約に同意しました
+                  agreed_at:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -547,6 +814,7 @@ paths:
     get:
       tags: [terms]
       summary: 同意状態確認
+      description: 最新の利用規約に同意済みかどうかを確認します。
       responses:
         '200':
           description: 同意状態
@@ -557,8 +825,10 @@ paths:
                 properties:
                   agreed:
                     type: boolean
+                    example: true
                   terms_version:
                     type: string
+                    example: v1.2
                   agreed_at:
                     type: string
                     format: date-time
@@ -574,12 +844,14 @@ paths:
       tags: [notifications]
       summary: お知らせ・ニュース一覧取得
       description: |
+        メンテナンス・お知らせ・AIニュースをまとめて取得します。
         フロントエンドは15分ごとにポーリングしてください。
         `since` パラメータで前回取得以降の新着のみ取得できます。
       parameters:
         - $ref: '#/components/parameters/locale'
         - name: since
           in: query
+          description: この日時以降の新着のみ取得（ISO8601形式）
           schema:
             type: string
             format: date-time
@@ -599,11 +871,17 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  # ==========================================
+  # メンテナンス状態確認
+  # ==========================================
+
   /maintenance/active:
     get:
       tags: [maintenance]
       summary: メンテナンス状態確認
-      description: アプリ起動時・5分ごとのポーリングで呼び出してください。
+      description: |
+        現在メンテナンス中かどうかを確認します。
+        アプリ起動時・5分ごとのポーリングで呼び出してください。
       security: []
       parameters:
         - $ref: '#/components/parameters/locale'
@@ -619,21 +897,34 @@ paths:
   # 銘柄マスタ
   # ==========================================
 
-  /stocks:
+  /guest/stocks:
     get:
       tags: [stocks]
       summary: 銘柄一覧取得
+      description: 銘柄マスタの一覧を取得します。検索・フィルタリングが可能です。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
       parameters:
         - $ref: '#/components/parameters/locale'
         - name: q
           in: query
+          description: 銘柄名・ティッカーで検索
           schema:
             type: string
+            example: 三菱
         - name: market
           in: query
+          description: 市場でフィルタ
           schema:
             type: string
             enum: [TSE, NYSE, NASDAQ]
+        - name: sector
+          in: query
+          description: 業種でフィルタ
+          schema:
+            type: string
+            example: 金融
         - name: limit
           in: query
           schema:
@@ -645,6 +936,13 @@ paths:
           schema:
             type: integer
             default: 0
+        - name: updated_after
+          in: query
+          description: この日時以降にバックエンドマスタが更新された銘柄のみ取得（差分同期用）
+          schema:
+            type: string
+            format: date-time
+            example: '2026-04-01T00:00:00Z'
       responses:
         '200':
           description: 銘柄一覧
@@ -659,17 +957,29 @@ paths:
                       $ref: '#/components/schemas/Stock'
                   total:
                     type: integer
+                    example: 250
+                  limit:
+                    type: integer
+                    example: 20
+                  offset:
+                    type: integer
+                    example: 0
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /stocks/{ticker}:
+  /guest/stocks/{ticker}:
     get:
       tags: [stocks]
       summary: 銘柄詳細取得
+      description: 指定した銘柄の詳細情報・配当履歴・株主優待を取得します。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
       parameters:
         - name: ticker
           in: path
           required: true
+          description: 銘柄コード（例：8058、AAPL）
           schema:
             type: string
             example: '8058'
@@ -686,10 +996,14 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /stocks/{ticker}/dividends:
+  /guest/stocks/{ticker}/dividends:
     get:
       tags: [stocks]
       summary: 配当金履歴取得
+      description: 指定した銘柄の配当金履歴を取得します。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
       parameters:
         - name: ticker
           in: path
@@ -714,13 +1028,19 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/StockDividend'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /stocks/{ticker}/benefits:
+  /guest/stocks/{ticker}/benefits:
     get:
       tags: [stocks]
       summary: 株主優待取得
+      description: 指定した銘柄の株主優待情報を取得します。株数別のtier情報を含みます。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
       parameters:
         - name: ticker
           in: path
@@ -740,8 +1060,1107 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/StockBenefit'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /guest/stocks/{ticker}/prices:
+    get:
+      tags: [stocks]
+      summary: 株価履歴取得
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
+      description: |
+        指定した銘柄の株価履歴（OHLCV）を取得します。
+        日足データを返します。
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: 銘柄コード（例：8058、AAPL）
+          schema:
+            type: string
+            example: '8058'
+        - name: from
+          in: query
+          description: 取得開始日（ISO8601形式）
+          schema:
+            type: string
+            format: date
+            example: '2026-01-01'
+        - name: to
+          in: query
+          description: 取得終了日（ISO8601形式）
+          schema:
+            type: string
+            format: date
+            example: '2026-03-24'
+        - name: limit
+          in: query
+          description: 取得件数（デフォルト30、最大365）
+          schema:
+            type: integer
+            default: 30
+            maximum: 365
+      responses:
+        '200':
+          description: 株価履歴
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticker:
+                    type: string
+                    example: '8058'
+                  currency:
+                    type: string
+                    example: JPY
+                  prices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockPrice'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /guest/stocks/{ticker}/prices/latest:
+    get:
+      tags: [stocks]
+      summary: 最新株価取得
+      description: 指定した銘柄の最新終値・前日比を取得します。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+            example: '8058'
+      responses:
+        '200':
+          description: 最新株価
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockPriceLatest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
+  # ==========================================
+  # 銘柄ウォッチ（株価取得対象の管理）
+  # ==========================================
+
+  /guest/stocks/{ticker}/watch:
+    post:
+      tags: [stocks]
+      summary: 銘柄ウォッチ登録（1件）
+      description: |
+        銘柄追加画面で銘柄を追加したタイミングで呼び出します。
+        watched_tickersテーブルに登録され、次回バッチ実行時から株価取得対象になります。
+        重複登録は無視されます（冪等）。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+          example: '8058'
+      responses:
+        '200':
+          description: 登録成功（または既に登録済み）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticker:
+                    type: string
+                    example: '8058'
+                  added_at:
+                    type: string
+                    format: date-time
+                  watcher_count:
+                    type: integer
+                    description: 保有ユーザー数
+                    example: 1
+    delete:
+      tags: [stocks]
+      summary: 銘柄ウォッチ解除（1件）
+      description: |
+        銘柄削除時に呼び出します。
+        watcher_countを-1します。0になっても削除しません（ネタコンテンツとして活用）。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+          example: '8058'
+      responses:
+        '200':
+          description: 解除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticker:
+                    type: string
+                    example: '8058'
+                  watcher_count:
+                    type: integer
+                    description: 解除後のwatcher_count（0以下にはならない）
+                    example: 0
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /guest/stocks/watch/bulk:
+    post:
+      tags: [stocks]
+      summary: 銘柄ウォッチ一括登録（CSVインポート用）
+      description: |
+        CSVインポート時に大量の銘柄を一括登録します。
+        watched_tickersテーブルに一括INSERTします（重複時はwatcher_countをインクリメント）。
+        最大1,000件まで受け付けます。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tickers]
+              properties:
+                tickers:
+                  type: array
+                  items:
+                    type: string
+                  maxItems: 1000
+                  example: ["8058", "7203", "AAPL", "MSFT"]
+      responses:
+        '200':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: integer
+                    description: 新規登録件数
+                    example: 4
+                  incremented:
+                    type: integer
+                    description: 既存銘柄のwatcher_countをインクリメントした件数
+                    example: 1
+                  total_watchers:
+                    type: object
+                    description: 登録後のwatcher_count（ticker→count）
+                    example: {"8058": 3, "7203": 1}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /guest/stocks/watch/reset:
+    post:
+      tags: [stocks]
+      summary: 銘柄ウォッチ一括解除（全削除・初期化用）
+      description: |
+        以下のタイミングで呼び出します。
+        - 設定画面「すべての銘柄を削除」ボタン
+        - アプリ初期化（全データ削除）
+
+        指定した全銘柄のwatcher_countを-1します。
+        0になっても削除しません（ネタコンテンツとして活用）。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tickers]
+              properties:
+                tickers:
+                  type: array
+                  description: 解除する銘柄コードの一覧（保有していた全銘柄）
+                  items:
+                    type: string
+                  maxItems: 1000
+                  example: ["8058", "7203", "AAPL"]
+      responses:
+        '200':
+          description: 解除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decremented:
+                    type: integer
+                    description: watcher_countをデクリメントした件数
+                    example: 3
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ==========================================
+  # 為替レート
+  # ==========================================
+
+  /guest/fx/latest:
+    get:
+      tags: [stocks]
+      summary: 最新為替レート取得
+      description: |
+        最新のUSD/JPY為替レートを取得します。
+
+        ## フロントエンドとの連携
+        フロントエンドの `app_settings.usd_jpy` の更新に使用します。
+        アプリ起動時・バックグラウンドからの復帰時に呼び出してください。
+
+        バッチ（fx-rate-batch）がECB APIから取得した公式レートを返します。
+        フロントが直接ECB APIを呼ぶ必要はありません。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
+      responses:
+        '200':
+          description: 最新為替レート
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usd_jpy:
+                    type: number
+                    description: USD/JPYレート
+                    example: 149.5
+                  updated_at:
+                    type: string
+                    format: date-time
+                    description: ECBからの取得日時
+                    example: '2026-03-25T09:00:00Z'
+              example:
+                usd_jpy: 149.5
+                updated_at: '2026-03-25T09:00:00Z'
+
+  # ==========================================
+  # 内部バッチ処理用API（IAM認証・VPC内専用）
+  # ==========================================
+
+  /guest/versions/latest:
+    get:
+      tags: [versions]
+      summary: 最新アプリバージョン取得
+      description: |
+        最新のアプリバージョン情報を取得します。
+        無料・有償ユーザー問わず利用可能です。
+
+        ## フロントエンドとの連携
+        アプリ起動時に呼び出し、`min_required_version` と現在インストール済みのバージョンを比較して
+        強制アップデートの要否を判定してください。
+
+        `os` パラメータを指定すると、そのOSの最新バージョンを `latest_version` に返します。
+        省略すると全体の最新バージョンを返します。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
+      parameters:
+        - name: os
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ios, android, all]
+          description: 対象OS（省略時は全体の最新バージョンを返す）
+          example: ios
+      responses:
+        '200':
+          description: 最新バージョン情報
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppVersionLatest'
+              examples:
+                レスポンス例:
+                  value:
+                    latest_version: '1.1.0'
+                    min_required_version: '1.0.0'
+                    store_url_ios: 'https://apps.apple.com/app/morincum/id0000000000'
+                    store_url_android: 'https://play.google.com/store/apps/details?id=com.morincum'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /internal/stocks/watched:
+    get:
+      tags: [internal]
+      summary: watcher_countランキング取得
+      description: |
+        watcher_countの統計情報を返します。
+        バッチの株価取得対象は stocks 全件です（watched_tickersによる絞り込みは行いません）。
+
+        ## 用途
+        - 人気銘柄ランキング（watcher_count上位）
+        - 「誰にも選ばれていない銘柄」コンテンツ（watcher_count=0）
+        - X投稿生成・ニュース生成バッチのネタデータ取得
+      security:
+        - iamAuth: []
+      parameters:
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [desc, asc]
+            default: desc
+          description: desc=人気順（上位ランキング）/ asc=不人気順（底辺ランキング）
+        - name: market
+          in: query
+          schema:
+            type: string
+            enum: [JP, US]
+          description: 市場区分（省略時は全市場）
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 100
+      responses:
+        '200':
+          description: watcher_countランキング
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rankings:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ticker:
+                          type: string
+                          example: '8058'
+                        name_ja:
+                          type: string
+                          example: 三菱商事
+                        watcher_count:
+                          type: integer
+                          example: 42
+                  total_watched:
+                    type: integer
+                    description: watcher_count > 0 の銘柄数
+                    example: 312
+                  total_unwatched:
+                    type: integer
+                    description: watcher_count = 0 の銘柄数
+                    example: 11179
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /internal/batch/prices:
+    post:
+      tags: [internal]
+      summary: 株価（OHLCV）一括登録
+      description: |
+        Pythonバッチが取得した日本株・米国株の株価（始値・高値・安値・終値・出来高）をS3経由で登録します。
+        バッチはS3にJSONをPUTした後、このエンドポイントにS3キーを渡してください。
+        バックエンドがS3からJSONを取得してRDSに書き込みます。
+
+        S3に置くJSONのフォーマット：
+        ```json
+        {
+          "price_date": "2026-03-24",
+          "prices": [
+            {
+              "ticker": "8058",
+              "open": 3200,
+              "high": 3280,
+              "low": 3190,
+              "close": 3240,
+              "adjusted_close": 3240,
+              "volume": 1250000,
+              "currency": "JPY"
+            }
+          ]
+        }
+        ```
+      security:
+        - iamAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [s3_key, price_date]
+              properties:
+                s3_key:
+                  type: string
+                  description: S3バケット内のJSONファイルパス
+                  example: prices/2026-03-24.json
+                price_date:
+                  type: string
+                  format: date
+                  description: 取得対象日
+                  example: '2026-03-24'
+            example:
+              s3_key: prices/2026-03-24.json
+              price_date: '2026-03-24'
+      responses:
+        '200':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /internal/batch/dividends:
+    post:
+      tags: [internal]
+      summary: 配当情報一括登録
+      description: |
+        Pythonバッチが取得した日本株・米国株の配当情報をS3経由で登録します。
+        バッチはS3にJSONをPUTした後、このエンドポイントにS3キーを渡してください。
+        バックエンドがS3からJSONを取得してRDSに書き込みます。
+      security:
+        - iamAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [s3_key, fetched_date]
+              properties:
+                s3_key:
+                  type: string
+                  description: S3バケット内のJSONファイルパス
+                  example: dividends/2026-03-24.json
+                fetched_date:
+                  type: string
+                  format: date
+                  description: 取得実行日
+                  example: '2026-03-24'
+            example:
+              s3_key: dividends/2026-03-24.json
+              fetched_date: '2026-03-24'
+      responses:
+        '200':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /internal/batch/fund-prices:
+    post:
+      tags: [internal]
+      summary: 投資信託基準価額・分配金一括登録
+      description: |
+        Pythonバッチが取得した投資信託の基準価額・純資産総額・分配金をS3経由で登録します。
+        バッチはS3にJSONをPUTした後、このエンドポイントにS3キーを渡してください。
+        バックエンドがS3からJSONを取得してRDSに書き込みます。
+      security:
+        - iamAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [s3_key, price_date]
+              properties:
+                s3_key:
+                  type: string
+                  description: S3バケット内のJSONファイルパス
+                  example: fund_prices/2026-03-24.json
+                price_date:
+                  type: string
+                  format: date
+                  description: 取得対象日
+                  example: '2026-03-24'
+            example:
+              s3_key: fund_prices/2026-03-24.json
+              price_date: '2026-03-24'
+      responses:
+        '200':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /internal/batch/fx-rates:
+    post:
+      tags: [internal]
+      summary: 為替レート登録
+      description: |
+        Pythonバッチが取得したUSD/JPY為替レートをS3経由で登録します。
+        登録されたレートは GET /fx/latest でフロントエンドに提供されます。
+      security:
+        - iamAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [s3_key, rate_date]
+              properties:
+                s3_key:
+                  type: string
+                  description: S3バケット内のJSONファイルパス
+                  example: fx_rates/2026-03-25.json
+                rate_date:
+                  type: string
+                  format: date
+                  description: 取得対象日
+                  example: '2026-03-25'
+            example:
+              s3_key: fx_rates/2026-03-25.json
+              rate_date: '2026-03-25'
+      responses:
+        '200':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usd_jpy:
+                    type: number
+                    example: 149.5
+                  rate_date:
+                    type: string
+                    format: date
+                    example: '2026-03-25'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /internal/stocks/unwatched:
+    get:
+      tags: [internal]
+      summary: 未ウォッチ銘柄一覧取得
+      description: |
+        watched_tickersに存在しない、またはwatcher_count=0の銘柄一覧を返します。
+        X投稿生成バッチ・ニュース生成バッチで「誰も持っていない銘柄」コンテンツに使用します。
+
+        ## 活用例
+        - 「誰にも選ばれていない銘柄ランキング」X投稿
+        - 「モーリスも首をかしげる銘柄」アプリ内コンテンツ
+        - 週次ニュースの「底辺銘柄」ネタ
+      security:
+        - iamAuth: []
+      parameters:
+        - name: market
+          in: query
+          schema:
+            type: string
+            enum: [JP, US]
+          description: 市場区分（省略時は全市場）
+        - name: sector_en
+          in: query
+          schema:
+            type: string
+          description: セクター英名（省略時は全セクター）
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 100
+          description: 取得件数
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [random, code_asc]
+            default: random
+          description: 並び順（random=ランダム・code_asc=コード順）
+      responses:
+        '200':
+          description: 未ウォッチ銘柄一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stocks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ticker:
+                          type: string
+                          example: '1234'
+                        name_ja:
+                          type: string
+                          example: ○○産業
+                        sector_en:
+                          type: string
+                          example: mining
+                        watcher_count:
+                          type: integer
+                          description: 0=誰も保有していない
+                          example: 0
+                  total_unwatched:
+                    type: integer
+                    description: 未ウォッチ銘柄の総数
+                    example: 8432
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ==========================================
+  # 統計取得API（バッチ向け・IAM認証）
+  # ==========================================
+
+  /internal/stats/users:
+    get:
+      tags: [stats]
+      summary: ユーザー統計取得
+      description: |
+        Morincum-batchのSlack Bot・ニュース生成・X投稿文生成向けにユーザー統計を提供します。
+      security:
+        - iamAuth: []
+      parameters:
+        - name: from
+          in: query
+          description: 集計開始日
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: 集計終了日
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: ユーザー統計
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_users:
+                    type: integer
+                    example: 1250
+                  new_users_this_month:
+                    type: integer
+                    example: 87
+                  dau:
+                    type: integer
+                    description: 直近7日間の平均DAU
+                    example: 142
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /internal/stats/surveys:
+    get:
+      tags: [stats]
+      summary: アンケート集計取得
+      description: Morincum-batchのSlack Bot向けにアンケート回答集計を提供します。
+      security:
+        - iamAuth: []
+      responses:
+        '200':
+          description: アンケート集計
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_answers:
+                    type: integer
+                    example: 430
+                  breakdown_by_question:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        question_id:
+                          type: string
+                          format: uuid
+                        question_text:
+                          type: string
+                        answer_counts:
+                          type: object
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /internal/stats/portfolio:
+    get:
+      tags: [stats]
+      summary: ポートフォリオ傾向取得
+      description: Morincum-batchのニュース生成・X投稿向けにポートフォリオ傾向データを提供します。
+      security:
+        - iamAuth: []
+      responses:
+        '200':
+          description: ポートフォリオ傾向
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  avg_annual_dividend:
+                    type: number
+                    description: 平均年間配当金（円）
+                    example: 125000
+                  top_sectors:
+                    type: array
+                    description: 人気業種TOP5
+                    items:
+                      type: object
+                      properties:
+                        sector:
+                          type: string
+                        percentage:
+                          type: number
+                  top_asset_types:
+                    type: array
+                    description: 資産種別割合
+                    items:
+                      type: object
+                      properties:
+                        asset_type:
+                          type: string
+                        percentage:
+                          type: number
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ==========================================
+  # ニュース管理API（バッチ向け・IAM認証）
+  # ==========================================
+
+  /internal/news:
+    post:
+      tags: [news]
+      summary: AIニュース保存
+      description: |
+        Morincum-batchのAIニュース生成バッチが生成したニュースを保存します。
+        保存されたニュースは GET /notifications で配信されます。
+      security:
+        - iamAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title_ja, body_ja, title_en, body_en]
+              properties:
+                title_ja:
+                  type: string
+                  example: 今月の配当金トレンド
+                body_ja:
+                  type: string
+                  example: 高配当銘柄の保有者が先月比+15%増加しました
+                title_en:
+                  type: string
+                body_en:
+                  type: string
+                expires_at:
+                  type: string
+                  format: date-time
+                  description: 掲載終了日時（省略時は30日後）
+      responses:
+        '201':
+          description: 保存成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  published_at:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ==========================================
+  # X投稿管理API（バッチ向け・IAM認証）
+  # ==========================================
+
+  /internal/x-posts:
+    post:
+      tags: [xposts]
+      summary: X投稿下書き保存
+      description: Morincum-batchのX投稿文生成バッチが生成した下書きを保存します。
+      security:
+        - iamAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, content]
+              properties:
+                category:
+                  type: string
+                  enum: [stats, maintenance, tips]
+                content:
+                  type: string
+                  description: 投稿文（140文字以内）
+                  maxLength: 140
+      responses:
+        '201':
+          description: 保存成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: draft
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /internal/x-posts/latest:
+    get:
+      tags: [xposts]
+      summary: 最新X投稿下書き取得
+      description: 最新のdraft状態のX投稿を取得します。
+      security:
+        - iamAuth: []
+      responses:
+        '200':
+          description: 最新下書き
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XPost'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /internal/x-posts/{id}/status:
+    patch:
+      tags: [xposts]
+      summary: X投稿ステータス更新
+      description: X投稿のステータスを更新します（承認・却下・投稿完了など）。
+      security:
+        - iamAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [approved, rejected, posted, skipped]
+                x_post_id:
+                  type: string
+                  description: X APIが返したポストID（status=postedのとき）
+                reviewed_by:
+                  type: string
+                  description: SlackユーザーID
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XPost'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==========================================
+  # お知らせ・メンテナンス管理API（バッチ向け・IAM認証）
+  # ==========================================
+
+  /internal/announcements:
+    post:
+      tags: [internal]
+      summary: お知らせ登録
+      description: Morincum-batchのSlackコマンド（/announcement create）からお知らせを登録します。
+      security:
+        - iamAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title_ja, body_ja, title_en, body_en]
+              properties:
+                title_ja:
+                  type: string
+                body_ja:
+                  type: string
+                title_en:
+                  type: string
+                body_en:
+                  type: string
+                publish_at:
+                  type: string
+                  format: date-time
+                  description: 公開日時（省略時は即時公開）
+                expires_at:
+                  type: string
+                  format: date-time
+                created_by:
+                  type: string
+                  description: SlackユーザーID
+      responses:
+        '201':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  published_at:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /internal/maintenances:
+    post:
+      tags: [internal]
+      summary: メンテナンス登録・更新
+      description: |
+        Morincum-batchのSlackコマンド（/maintenance）からメンテナンス情報を登録します。
+        typeに応じて処理が変わります。
+      security:
+        - iamAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [create, incident, resolve]
+                  description: create=予告登録 / incident=障害通知 / resolve=完了
+                title_ja:
+                  type: string
+                title_en:
+                  type: string
+                message_ja:
+                  type: string
+                message_en:
+                  type: string
+                starts_at:
+                  type: string
+                  format: date-time
+                  description: 開始日時（action=createのとき必須）
+                ends_at:
+                  type: string
+                  format: date-time
+                  description: 終了日時（action=createのとき必須）
+                maintenance_id:
+                  type: string
+                  format: uuid
+                  description: 対象メンテナンスID（action=resolveのとき必須）
+                created_by:
+                  type: string
+                  description: SlackユーザーID
+      responses:
+        '201':
+          description: 登録成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: upcoming
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   # ==========================================
   # 行動ログ送信
@@ -752,7 +2171,11 @@ paths:
       tags: [logs]
       summary: 行動ログ送信
       description: |
-        20件溜まったとき・バックグラウンド移行時・30秒ごとにまとめて送信してください。
+        アプリの行動ログをバッチで送信します。
+        以下のタイミングでまとめて送信してください。
+        - 20件溜まったとき
+        - アプリがバックグラウンドに移ったとき
+        - 30秒ごとの定期送信
       requestBody:
         required: true
         content:
@@ -769,6 +2192,17 @@ paths:
       responses:
         '202':
           description: ログ受付成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: integer
+                    description: 受け付けたイベント数
+                    example: 5
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -782,12 +2216,31 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Cognito アクセストークン
+      description: |
+        Cognito JWTアクセストークン。
+        ログイン済みユーザー向け。全エンドポイントで使用可能。
+    guestAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Cognito Identity Poolが発行する匿名トークン。
+        未ログインユーザー向け。アプリ起動時に自動発行。
+        stocks系エンドポイントのみアクセス可能。
+    iamAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        AWS SigV4署名による認証。
+        LambdaのIAMロールに execute-api:Invoke 権限を付与して使用します。
+        VPC内通信専用のため、インターネットからはアクセスできません。
 
   parameters:
     locale:
       name: locale
       in: query
+      description: 言語設定
       schema:
         type: string
         enum: [ja, en]
@@ -814,6 +2267,54 @@ components:
             $ref: '#/components/schemas/Error'
     Conflict:
       description: 既に存在します
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: アクセス権限がありません（IAM認証失敗）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnprocessableEntity:
+      description: |
+        データのバリデーションエラー。
+        S3ファイルの形式不正・必須フィールド欠損・異常値などが該当します。
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: VALIDATION_ERROR
+                  message:
+                    type: string
+                    example: データのバリデーションに失敗しました
+                  details:
+                    type: array
+                    description: バリデーションエラーの詳細
+                    items:
+                      type: object
+                      properties:
+                        field:
+                          type: string
+                          example: close_price
+                        reason:
+                          type: string
+                          example: 負の値は許可されていません
+    InternalServerError:
+      description: サーバー内部エラー（S3取得失敗・RDS書き込み失敗など）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServiceUnavailable:
+      description: メンテナンス中
       content:
         application/json:
           schema:
@@ -845,8 +2346,10 @@ components:
           description: リフレッシュトークン（有効期限30日）
         id_token:
           type: string
+          description: IDトークン（ユーザー情報を含む）
         expires_in:
           type: integer
+          description: アクセストークンの有効期限（秒）
           example: 3600
 
     MfaChallenge:
@@ -857,6 +2360,23 @@ components:
           enum: [TOTP]
         session:
           type: string
+          description: MFA検証に使用するセッショントークン
+
+    UserPlan:
+      type: object
+      properties:
+        plan_id:
+          type: string
+          enum: [free, standard]
+          description: |
+            現在のプランID。
+            - `free`: 無料ユーザー（is_premium = false）
+            - `standard`: 有料ユーザー（is_premium = true）
+          example: free
+        has_shown_downgrade_message:
+          type: boolean
+          description: ダウングレード通知モーダルを表示済みかどうか
+          example: false
 
     User:
       type: object
@@ -864,20 +2384,28 @@ components:
         id:
           type: string
           format: uuid
+          description: CognitoのsubがそのままIDになります
         email:
           type: string
           format: email
         age_range:
           type: string
+          enum: [10代, 20代, 30代, 40代, 50代, 60代以上]
           nullable: true
         investment_experience:
           type: string
+          enum: [1年未満, 1〜3年, 3〜5年, 5〜10年, 10年以上]
           nullable: true
         preferred_locale:
           type: string
           enum: [ja, en]
         is_premium:
           type: boolean
+          description: |
+            有料プランかどうか。
+            RevenueCat Webhookで更新されます。
+            true=有料（広告なし）/ false=無料（AdMob広告あり）
+          example: false
         created_at:
           type: string
           format: date-time
@@ -887,14 +2415,27 @@ components:
       properties:
         total_annual_dividend:
           type: number
+          description: 年間配当金合計（円）
           example: 150000
         sector_breakdown:
           type: object
+          description: 業界別割合（%）
+          example:
+            金融: 35
+            テック: 25
+            商社: 20
+            娯楽: 20
         asset_type_breakdown:
           type: object
+          description: 資産種別割合（%）
+          example:
+            日本株: 50
+            米国株: 30
+            投資信託: 20
         recorded_month:
           type: string
           format: date
+          example: '2026-03-01'
         updated_at:
           type: string
           format: date-time
@@ -907,8 +2448,10 @@ components:
           format: uuid
         title:
           type: string
+          example: 投資スタイルアンケート
         version:
           type: string
+          example: v1.0
         questions:
           type: array
           items:
@@ -922,6 +2465,7 @@ components:
           format: uuid
         question_text:
           type: string
+          example: 投資歴を教えてください
         question_type:
           type: string
           enum: [single, multi, free_text]
@@ -929,8 +2473,10 @@ components:
           type: integer
         options:
           type: array
+          description: single・multi の場合の選択肢
           items:
             type: string
+          example: [1年未満, 1〜3年, 3〜5年, 5年以上]
 
     Terms:
       type: object
@@ -941,12 +2487,24 @@ components:
         version:
           type: string
           example: v1.2
+        type:
+          type: string
+          enum: [terms, policy, disclaimer]
+          description: |
+            - terms: 利用規約（フロントの legal_agreements.terms_version と対応）
+            - policy: プライバシーポリシー（フロントの legal_agreements.policy_version と対応）
+            - disclaimer: 免責事項（株価データの非公式性・投資判断の自己責任）
+          example: terms
         title:
           type: string
+          example: 利用規約
         content:
           type: string
+          description: 規約本文
         s3_url:
           type: string
+          description: PDF版のS3 URL
+          example: https://s3.ap-northeast-1.amazonaws.com/morincum-assets/terms/v1.2/ja.pdf
         created_at:
           type: string
           format: date-time
@@ -960,10 +2518,16 @@ components:
         type:
           type: string
           enum: [maintenance, news, announcement]
+          description: |
+            - maintenance: メンテナンス情報
+            - news: AIが生成した統計ニュース
+            - announcement: 運営からのお知らせ
         title:
           type: string
+          example: 今週の配当金トレンド
         body:
           type: string
+          example: 高配当銘柄の保有者が先月比+15%増加しました
         published_at:
           type: string
           format: date-time
@@ -977,6 +2541,7 @@ components:
       properties:
         active:
           type: boolean
+          example: false
         type:
           type: string
           enum: [scheduled, incident]
@@ -988,9 +2553,11 @@ components:
         title:
           type: string
           nullable: true
+          example: 定期メンテナンス
         message:
           type: string
           nullable: true
+          example: メンテナンスを実施しています。終了予定：04:00
         starts_at:
           type: string
           format: date-time
@@ -1000,22 +2567,88 @@ components:
           format: date-time
           nullable: true
 
+    Sector:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 27
+        market:
+          type: string
+          enum: [JP, US]
+          example: JP
+        sector_en:
+          type: string
+          description: バッチ・API用の英名
+          example: wholesale_trade
+        sector_ja:
+          type: string
+          description: 表示用の日本語名
+          example: 卸売業
+
     Stock:
       type: object
       properties:
         ticker:
           type: string
           example: '8058'
-        name:
+        name_ja:
           type: string
+          description: 銘柄名（日本語）。米国株はカタカナ表記
+          example: 三菱商事
+        name_en:
+          type: string
+          nullable: true
+          description: 銘柄名（英語）。米国株のみ設定。日本株・投資信託は null
+          example: null
+        asset_type:
+          type: string
+          enum: [日本株, 米国株, 投資信託]
+          description: フロントエンドの securities_master.type と対応
+          example: 日本株
+        country:
+          type: string
+          enum: [日本, アメリカ]
+          description: フロントエンドの securities_master.country と対応
+          example: 日本
         market:
           type: string
           enum: [TSE, NYSE, NASDAQ]
+          example: TSE
         sector:
-          type: string
+          type: object
+          description: セクター情報
+          properties:
+            id:
+              type: integer
+              example: 27
+            sector_en:
+              type: string
+              description: バッチ・API用の英名
+              example: wholesale_trade
+            sector_ja:
+              type: string
+              description: 表示用の日本語名
+              example: 卸売業
         currency:
           type: string
           enum: [JPY, USD]
+          example: JPY
+        nisa_growth_start:
+          type: string
+          format: date
+          nullable: true
+          description: NISA成長投資枠取扱開始日。対象外の場合はnull
+          example: '2024-01-01'
+        nisa_tsumitate:
+          type: boolean
+          description: NISAつみたて投資枠対象フラグ
+          example: false
+        updated_at:
+          type: string
+          format: date-time
+          description: バックエンドマスタの更新日時。差分同期（updated_afterパラメータ）の基準となる日時
+          example: '2026-04-01T09:00:00Z'
 
     StockDetail:
       allOf:
@@ -1035,6 +2668,7 @@ components:
           format: uuid
         amount:
           type: number
+          description: 1株あたり配当金
           example: 140
         currency:
           type: string
@@ -1042,9 +2676,13 @@ components:
         ex_dividend_date:
           type: string
           format: date
+          description: 権利落ち日
+          example: '2026-03-28'
         payment_date:
           type: string
           format: date
+          description: 支払日
+          example: '2026-06-10'
         fiscal_period:
           type: string
           example: 2025Q4
@@ -1058,10 +2696,14 @@ components:
         record_date:
           type: string
           format: date
+          description: 権利確定日
+          example: '2026-03-31'
         fiscal_period:
           type: string
+          example: 2025Q4
         tiers:
           type: array
+          description: 株数別の優待内容
           items:
             $ref: '#/components/schemas/BenefitTier'
 
@@ -1070,14 +2712,188 @@ components:
       properties:
         min_shares:
           type: integer
+          description: 必要最低株数
           example: 100
         benefit_type:
           type: string
+          example: 食品
         estimated_value:
           type: number
+          description: 推定金額（円）
           example: 3000
         description:
           type: string
+          description: 優待内容の説明
+          example: カタログギフト（3,000円相当）
+
+    StockPrice:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: 取引日
+          example: '2026-03-24'
+        open:
+          type: number
+          description: 始値
+          example: 3200
+        high:
+          type: number
+          description: 高値
+          example: 3280
+        low:
+          type: number
+          description: 安値
+          example: 3190
+        close:
+          type: number
+          description: 終値
+          example: 3240
+        adjusted_close:
+          type: number
+          description: 調整済み終値（株式分割・配当考慮）
+          example: 3240
+        volume:
+          type: integer
+          description: 出来高
+          example: 1250000
+
+    StockPriceLatest:
+      type: object
+      properties:
+        ticker:
+          type: string
+          example: '8058'
+        date:
+          type: string
+          format: date
+          description: 最終取引日
+          example: '2026-03-24'
+        close:
+          type: number
+          description: 最新終値
+          example: 3240
+        change_amount:
+          type: number
+          description: 前日比（円・ドル）
+          example: 45
+        change_percent:
+          type: number
+          description: 前日比（%）
+          example: 1.41
+        currency:
+          type: string
+          enum: [JPY, USD]
+          example: JPY
+        updated_at:
+          type: string
+          format: date-time
+
+    XPost:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        category:
+          type: string
+          enum: [stats, maintenance, tips]
+        content:
+          type: string
+        status:
+          type: string
+          enum: [draft, approved, rejected, posted, skipped]
+        generated_at:
+          type: string
+          format: date-time
+        reviewed_by:
+          type: string
+          nullable: true
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        posted_at:
+          type: string
+          format: date-time
+          nullable: true
+        x_post_id:
+          type: string
+          nullable: true
+
+    AppVersionLatest:
+      type: object
+      required: [latest_version, min_required_version, store_url_ios, store_url_android]
+      properties:
+        latest_version:
+          type: string
+          description: 現在の最新バージョン番号
+          example: '1.1.0'
+        min_required_version:
+          type: string
+          description: 強制アップデートを要求する最低バージョン（これを下回る場合に強制アップデート）
+          example: '1.0.0'
+        store_url_ios:
+          type: string
+          description: iOS App Store の URL
+          example: 'https://apps.apple.com/app/morincum/id0000000000'
+        store_url_android:
+          type: string
+          description: Google Play Store の URL
+          example: 'https://play.google.com/store/apps/details?id=com.morincum'
+
+    AppVersion:
+      type: object
+      required: [version, os, release_date, min_required_version]
+      properties:
+        version:
+          type: string
+          description: バージョン番号
+          example: '1.2.0'
+        os:
+          type: string
+          enum: [ios, android, all]
+          description: 対象OS
+          example: ios
+        release_date:
+          type: string
+          format: date
+          description: アップデート日（YYYY-MM-DD）
+          example: '2026-03-30'
+        min_required_version:
+          type: string
+          description: 強制アップデートを要求する最低バージョン（これを下回る場合に強制アップデート）
+          example: '1.0.0'
+
+    BatchResult:
+      type: object
+      properties:
+        accepted:
+          type: integer
+          description: 正常に登録されたレコード数
+          example: 2150
+        skipped:
+          type: integer
+          description: 重複によりスキップされたレコード数
+          example: 3
+        failed:
+          type: integer
+          description: バリデーションエラー等で登録失敗したレコード数
+          example: 0
+        s3_key:
+          type: string
+          description: 処理したS3ファイルパス
+          example: prices/2026-03-24.json
+        archived_s3_key:
+          type: string
+          description: アーカイブ後のS3ファイルパス
+          example: archive/prices/2026-03-24.json
+        processed_at:
+          type: string
+          format: date-time
+          description: 処理完了日時
+          example: '2026-03-24T16:35:12Z'
 
     LogEvent:
       type: object
@@ -1100,5 +2916,16 @@ components:
           enum: [ios, android]
         app_version:
           type: string
+          example: 1.2.0
         properties:
           type: object
+          description: |
+            イベント種別ごとの追加データ
+            - page_view: screen_name, previous_screen, duration_ms
+            - button_tap: button_id, screen_name
+            - error: error_code, error_message, stack_trace, is_crash
+            - performance: screen_name, load_time_ms, api_latency_ms
+          example:
+            screen_name: portfolio
+            previous_screen: home
+            duration_ms: 3200
