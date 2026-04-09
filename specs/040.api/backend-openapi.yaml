@@ -29,7 +29,7 @@ info:
 
     ## エラーレスポンス
     全エンドポイント共通のエラー形式を返します。
-  version: 1.10.0
+  version: 1.11.0
   contact:
     name: Morincum開発チーム
 
@@ -2399,13 +2399,13 @@ components:
         preferred_locale:
           type: string
           enum: [ja, en]
-        is_premium:
-          type: boolean
+        plan_id:
+          type: string
           description: |
-            有料プランかどうか。
-            RevenueCat Webhookで更新されます。
-            true=有料（広告なし）/ false=無料（AdMob広告あり）
-          example: false
+            現在のプランID。RevenueCat Webhookで更新されます。
+            - `free`: 無料ユーザー（AdMob広告あり）
+            - `standard`: Standardプラン（広告なし）
+          example: free
         created_at:
           type: string
           format: date-time
