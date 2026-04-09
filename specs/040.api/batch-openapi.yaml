@@ -1,0 +1,297 @@
+openapi: 3.0.3
+info:
+  title: Morincum-batch API
+  description: |
+    Morincum-batchが受信するAPIの仕様書です。
+
+    ## 概要
+    Morincum-batchは以下の2種類のリクエストを受信します。
+
+    ### 1. Slack Events API（Slack → Lambda）
+    SlackからのメンションイベントやスラッシュコマンドをAPI Gatewayで受信します。
+
+    ### 2. EventBridge Scheduler（定期実行）
+    定期的にLambdaを直接起動します。APIエンドポイントは不要です。
+
+    ## バックエンドAPIとの連携
+    バッチはMorincum-backendのInternal API（iamAuth）を呼び出してデータを取得・保存します。
+
+    ## 認証
+    Slack Eventsの受信はSlack Signing Secretで署名検証を行います。
+  version: 1.0.0
+  contact:
+    name: Morincum開発チーム
+
+servers:
+  - url: https://batch.morincum.com/v1
+    description: 本番環境（Slack受信用）
+  - url: https://batch-dev.morincum.com/v1
+    description: 開発環境
+
+tags:
+  - name: slack-events
+    description: Slack Events API受信（メンション・コマンド）
+  - name: health
+    description: ヘルスチェック
+
+paths:
+
+  /slack/events:
+    post:
+      tags: [slack-events]
+      summary: Slackイベント受信
+      description: |
+        SlackのEvents API（メンション・リアクション等）を受信します。
+
+        ## 処理フロー
+        1. Slack Signing Secretで署名検証
+        2. 即座に200 OKを返す（3秒タイムアウト対策）
+        3. 非同期で処理用Lambdaを起動
+
+        ## URL確認チャレンジ
+        Slack App設定時のURL確認リクエスト（challenge）にも対応します。
+      security:
+        - slackSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/SlackChallenge'
+                - $ref: '#/components/schemas/SlackAppMentionEvent'
+      responses:
+        '200':
+          description: 受信成功（即時返却）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  challenge:
+                    type: string
+
+  /slack/commands/maintenance:
+    post:
+      tags: [slack-events]
+      summary: /maintenance コマンド受信
+      description: |
+        Slackの `/maintenance` スラッシュコマンドを受信します。
+
+        ## サブコマンド
+        - `create` : メンテナンス予告の登録
+        - `incident` : 障害発生の即時通知
+        - `resolve` : メンテナンス完了通知
+
+        ## 処理フロー
+        1. Slack Signing Secretで署名検証
+        2. 即座に200 OKとメッセージを返す
+        3. 非同期でバックエンドInternal API（POST /internal/maintenances）を呼び出す
+      security:
+        - slackSignature: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SlackSlashCommand'
+      responses:
+        '200':
+          description: コマンド受信成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackCommandResponse'
+
+  /slack/commands/announcement:
+    post:
+      tags: [slack-events]
+      summary: /announcement コマンド受信
+      description: |
+        Slackの `/announcement` スラッシュコマンドを受信します。
+
+        ## サブコマンド
+        - `create` : お知らせの登録
+
+        ## 処理フロー
+        1. Slack Signing Secretで署名検証
+        2. 即座に200 OKとメッセージを返す
+        3. 非同期でバックエンドInternal API（POST /internal/announcements）を呼び出す
+      security:
+        - slackSignature: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SlackSlashCommand'
+      responses:
+        '200':
+          description: コマンド受信成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackCommandResponse'
+
+  /slack/interactions:
+    post:
+      tags: [slack-events]
+      summary: Slackインタラクション受信（Phase 2）
+      description: |
+        X投稿の承認・編集・却下ボタンのクリックを受信します。（Phase 2で実装）
+
+        ## 処理フロー
+        1. Slack Signing Secretで署名検証
+        2. 即座に200 OKを返す
+        3. 非同期でバックエンドInternal API（PATCH /internal/x-posts/{id}/status）を呼び出す
+      security:
+        - slackSignature: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                payload:
+                  type: string
+                  description: JSON文字列のインタラクションペイロード
+      responses:
+        '200':
+          description: 受信成功
+
+  /health:
+    get:
+      tags: [health]
+      summary: ヘルスチェック
+      security: []
+      responses:
+        '200':
+          description: 正常稼働中
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 1.0.0
+
+# ==========================================
+# 定期実行バッチ（EventBridge Scheduler）
+# ==========================================
+# APIエンドポイントではなく EventBridge Scheduler が Lambda を直接起動します。
+#
+# バッチ名                  実行タイミング
+# ────────────────────────────────────────
+# stock-price-batch         平日 16:30 JST（日本株）/ 翌 6:30 JST（米国株）
+# dividend-batch            平日 17:00 JST
+# fund-price-batch          平日 19:00 JST
+# news-generate-batch       毎週月曜 8:00 JST
+# x-post-generate-batch     毎日 9:00 JST
+
+components:
+  securitySchemes:
+    slackSignature:
+      type: apiKey
+      in: header
+      name: X-Slack-Signature
+      description: |
+        Slack Signing Secretを使ったリクエスト署名検証。
+        X-Slack-Request-Timestamp ヘッダーと組み合わせて検証します。
+
+  schemas:
+
+    SlackChallenge:
+      type: object
+      description: Slack URL確認チャレンジ
+      properties:
+        token:
+          type: string
+        challenge:
+          type: string
+        type:
+          type: string
+          enum: [url_verification]
+
+    SlackAppMentionEvent:
+      type: object
+      description: Slackメンションイベント
+      properties:
+        token:
+          type: string
+        team_id:
+          type: string
+        event:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [app_mention]
+            user:
+              type: string
+            text:
+              type: string
+              description: メンションのテキスト（例：@morincum-bot 今日のDAUは？）
+            channel:
+              type: string
+            ts:
+              type: string
+        type:
+          type: string
+          enum: [event_callback]
+
+    SlackSlashCommand:
+      type: object
+      description: Slackスラッシュコマンドのペイロード
+      properties:
+        command:
+          type: string
+          example: /maintenance
+        text:
+          type: string
+          example: "create title_ja: 定期メンテナンス starts_at: 2026-03-20 02:00"
+        user_id:
+          type: string
+        user_name:
+          type: string
+        channel_id:
+          type: string
+        response_url:
+          type: string
+
+    SlackCommandResponse:
+      type: object
+      properties:
+        response_type:
+          type: string
+          enum: [ephemeral, in_channel]
+          example: ephemeral
+        text:
+          type: string
+          example: "✅ 処理を受け付けました。しばらくお待ちください。"
+
+    BatchExecutionResult:
+      type: object
+      properties:
+        batch_name:
+          type: string
+          example: stock-price-batch
+        executed_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [success, partial_failure, failure]
+        processed_count:
+          type: integer
+          example: 4250
+        error_count:
+          type: integer
+          example: 0
+        duration_ms:
+          type: integer
+          example: 12500
