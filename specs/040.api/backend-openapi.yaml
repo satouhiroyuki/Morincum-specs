@@ -1,0 +1,1104 @@
+openapi: 3.0.3
+info:
+  title: Morincum バックエンドAPI
+  description: |
+    配当金管理アプリ「Morincum」のバックエンドAPIです。
+
+    ## 認証
+    Cognito JWTトークンを使用します。
+    `Authorization: Bearer <access_token>` ヘッダーに設定してください。
+
+    ## 多言語対応
+    `locale` パラメータで `ja`（日本語）または `en`（英語）を指定できます。
+    省略時はユーザーの `preferred_locale` 設定が適用されます。
+
+    ## エラーレスポンス
+    全エンドポイント共通のエラー形式を返します。
+  version: 1.0.0
+  contact:
+    name: Morincum 開発チーム
+
+servers:
+  - url: https://api.morincum.com/v1
+    description: 本番環境
+  - url: https://api-staging.morincum.com/v1
+    description: ステージング環境
+  - url: https://api-dev.morincum.com/v1
+    description: 開発環境
+
+tags:
+  - name: auth
+    description: 認証・セッション管理
+  - name: users
+    description: ユーザー管理
+  - name: portfolio
+    description: ポートフォリオ集計
+  - name: surveys
+    description: アンケート
+  - name: terms
+    description: 利用規約・同意管理
+  - name: notifications
+    description: お知らせ・ニュース・メンテナンス配信
+  - name: maintenance
+    description: メンテナンス状態確認
+  - name: stocks
+    description: 銘柄マスタ
+  - name: logs
+    description: 行動ログ送信
+
+security:
+  - cognitoAuth: []
+
+paths:
+
+  # ==========================================
+  # 認証
+  # ==========================================
+
+  /auth/signup:
+    post:
+      tags: [auth]
+      summary: ユーザー登録
+      description: 新規ユーザーをCognitoに登録します。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  minLength: 8
+                  example: Password123!
+      responses:
+        '200':
+          description: 登録成功。確認メールを送信しました。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: 確認メールを送信しました
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /auth/confirm:
+    post:
+      tags: [auth]
+      summary: メールアドレス確認
+      description: 登録メールに届いた確認コードを検証します。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                  example: '123456'
+      responses:
+        '200':
+          description: 確認成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: メールアドレスを確認しました
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/signin:
+    post:
+      tags: [auth]
+      summary: ログイン
+      description: メールアドレスとパスワードでログインします。MFAが有効な場合は追加の認証ステップが必要です。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: ログイン成功またはMFA認証が必要
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AuthTokens'
+                  - $ref: '#/components/schemas/MfaChallenge'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/mfa/verify:
+    post:
+      tags: [auth]
+      summary: MFA認証
+      description: TOTPコードを検証してログインを完了します。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session, code]
+              properties:
+                session:
+                  type: string
+                  description: サインインレスポンスのsessionトークン
+                code:
+                  type: string
+                  description: 認証アプリの6桁コード
+                  example: '123456'
+      responses:
+        '200':
+          description: MFA認証成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: トークンリフレッシュ
+      description: リフレッシュトークンを使用してアクセストークンを更新します。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: トークン更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/signout:
+    post:
+      tags: [auth]
+      summary: ログアウト
+      description: グローバルサインアウトを実行します。全デバイスのセッションが無効化されます。
+      responses:
+        '200':
+          description: ログアウト成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: ログアウトしました
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/password/reset/request:
+    post:
+      tags: [auth]
+      summary: パスワードリセット要求
+      description: パスワードリセット用のコードをメールで送信します。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: リセットメール送信成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: パスワードリセットメールを送信しました
+
+  /auth/password/reset/confirm:
+    post:
+      tags: [auth]
+      summary: パスワードリセット確定
+      description: コードと新しいパスワードでリセットを完了します。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, new_password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                new_password:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: パスワードリセット成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: パスワードをリセットしました
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ==========================================
+  # ユーザー管理
+  # ==========================================
+
+  /users/me:
+    get:
+      tags: [users]
+      summary: 自分のプロフィール取得
+      responses:
+        '200':
+          description: ユーザー情報
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      tags: [users]
+      summary: プロフィール更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                age_range:
+                  type: string
+                  enum: [10代, 20代, 30代, 40代, 50代, 60代以上]
+                investment_experience:
+                  type: string
+                  enum: [1年未満, 1〜3年, 3〜5年, 5〜10年, 10年以上]
+                preferred_locale:
+                  type: string
+                  enum: [ja, en]
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      tags: [users]
+      summary: アカウント削除
+      responses:
+        '200':
+          description: 削除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: アカウントを削除しました
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
+  # ポートフォリオ集計
+  # ==========================================
+
+  /portfolio/summary:
+    get:
+      tags: [portfolio]
+      summary: ポートフォリオ集計取得
+      responses:
+        '200':
+          description: ポートフォリオ集計
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      tags: [portfolio]
+      summary: ポートフォリオ集計更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [total_annual_dividend, sector_breakdown, asset_type_breakdown]
+              properties:
+                total_annual_dividend:
+                  type: number
+                  example: 150000
+                sector_breakdown:
+                  type: object
+                  example: {金融: 35, テック: 25}
+                asset_type_breakdown:
+                  type: object
+                  example: {日本株: 50, 米国株: 30, 投資信託: 20}
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /portfolio/history:
+    get:
+      tags: [portfolio]
+      summary: ポートフォリオ履歴取得
+      parameters:
+        - name: months
+          in: query
+          schema:
+            type: integer
+            default: 12
+            maximum: 60
+      responses:
+        '200':
+          description: ポートフォリオ履歴
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        recorded_month:
+                          type: string
+                          format: date
+                        total_annual_dividend:
+                          type: number
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
+  # アンケート
+  # ==========================================
+
+  /surveys/active:
+    get:
+      tags: [surveys]
+      summary: 有効なアンケート取得
+      parameters:
+        - $ref: '#/components/parameters/locale'
+      responses:
+        '200':
+          description: アンケート情報
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Survey'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /surveys/{survey_id}/answers:
+    post:
+      tags: [surveys]
+      summary: アンケート回答送信
+      parameters:
+        - name: survey_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    required: [question_id, answer]
+                    properties:
+                      question_id:
+                        type: string
+                        format: uuid
+                      answer:
+                        oneOf:
+                          - type: string
+                          - type: array
+                            items:
+                              type: string
+      responses:
+        '201':
+          description: 回答送信成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
+  # 利用規約・同意管理
+  # ==========================================
+
+  /terms/active:
+    get:
+      tags: [terms]
+      summary: 有効な利用規約取得
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/locale'
+      responses:
+        '200':
+          description: 利用規約
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Terms'
+
+  /terms/consent:
+    post:
+      tags: [terms]
+      summary: 利用規約への同意
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [terms_id]
+              properties:
+                terms_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: 同意記録成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /terms/consent/status:
+    get:
+      tags: [terms]
+      summary: 同意状態確認
+      responses:
+        '200':
+          description: 同意状態
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agreed:
+                    type: boolean
+                  terms_version:
+                    type: string
+                  agreed_at:
+                    type: string
+                    format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
+  # お知らせ・ニュース・メンテナンス配信
+  # ==========================================
+
+  /notifications:
+    get:
+      tags: [notifications]
+      summary: お知らせ・ニュース一覧取得
+      description: |
+        フロントエンドは15分ごとにポーリングしてください。
+        `since` パラメータで前回取得以降の新着のみ取得できます。
+      parameters:
+        - $ref: '#/components/parameters/locale'
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+            example: '2026-03-18T10:00:00Z'
+      responses:
+        '200':
+          description: お知らせ一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notifications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /maintenance/active:
+    get:
+      tags: [maintenance]
+      summary: メンテナンス状態確認
+      description: アプリ起動時・5分ごとのポーリングで呼び出してください。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/locale'
+      responses:
+        '200':
+          description: メンテナンス状態
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceStatus'
+
+  # ==========================================
+  # 銘柄マスタ
+  # ==========================================
+
+  /stocks:
+    get:
+      tags: [stocks]
+      summary: 銘柄一覧取得
+      parameters:
+        - $ref: '#/components/parameters/locale'
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: market
+          in: query
+          schema:
+            type: string
+            enum: [TSE, NYSE, NASDAQ]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: 銘柄一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stocks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Stock'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /stocks/{ticker}:
+    get:
+      tags: [stocks]
+      summary: 銘柄詳細取得
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+            example: '8058'
+        - $ref: '#/components/parameters/locale'
+      responses:
+        '200':
+          description: 銘柄詳細
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /stocks/{ticker}/dividends:
+    get:
+      tags: [stocks]
+      summary: 配当金履歴取得
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+      responses:
+        '200':
+          description: 配当金履歴
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dividends:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockDividend'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /stocks/{ticker}/benefits:
+    get:
+      tags: [stocks]
+      summary: 株主優待取得
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/locale'
+      responses:
+        '200':
+          description: 株主優待情報
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  benefits:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockBenefit'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==========================================
+  # 行動ログ送信
+  # ==========================================
+
+  /logs/events:
+    post:
+      tags: [logs]
+      summary: 行動ログ送信
+      description: |
+        20件溜まったとき・バックグラウンド移行時・30秒ごとにまとめて送信してください。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  maxItems: 50
+                  items:
+                    $ref: '#/components/schemas/LogEvent'
+      responses:
+        '202':
+          description: ログ受付成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+# ==========================================
+# 共通コンポーネント
+# ==========================================
+
+components:
+  securitySchemes:
+    cognitoAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Cognito アクセストークン
+
+  parameters:
+    locale:
+      name: locale
+      in: query
+      schema:
+        type: string
+        enum: [ja, en]
+        default: ja
+
+  responses:
+    BadRequest:
+      description: リクエストが不正です
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: 認証が必要です
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: リソースが見つかりません
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: 既に存在します
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: INVALID_REQUEST
+            message:
+              type: string
+              example: リクエストの形式が正しくありません
+
+    AuthTokens:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: アクセストークン（有効期限1時間）
+        refresh_token:
+          type: string
+          description: リフレッシュトークン（有効期限30日）
+        id_token:
+          type: string
+        expires_in:
+          type: integer
+          example: 3600
+
+    MfaChallenge:
+      type: object
+      properties:
+        challenge_type:
+          type: string
+          enum: [TOTP]
+        session:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        age_range:
+          type: string
+          nullable: true
+        investment_experience:
+          type: string
+          nullable: true
+        preferred_locale:
+          type: string
+          enum: [ja, en]
+        is_premium:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    PortfolioSummary:
+      type: object
+      properties:
+        total_annual_dividend:
+          type: number
+          example: 150000
+        sector_breakdown:
+          type: object
+        asset_type_breakdown:
+          type: object
+        recorded_month:
+          type: string
+          format: date
+        updated_at:
+          type: string
+          format: date-time
+
+    Survey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        version:
+          type: string
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SurveyQuestion'
+
+    SurveyQuestion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        question_text:
+          type: string
+        question_type:
+          type: string
+          enum: [single, multi, free_text]
+        sort_order:
+          type: integer
+        options:
+          type: array
+          items:
+            type: string
+
+    Terms:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: string
+          example: v1.2
+        title:
+          type: string
+        content:
+          type: string
+        s3_url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [maintenance, news, announcement]
+        title:
+          type: string
+        body:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    MaintenanceStatus:
+      type: object
+      properties:
+        active:
+          type: boolean
+        type:
+          type: string
+          enum: [scheduled, incident]
+          nullable: true
+        status:
+          type: string
+          enum: [upcoming, active, resolved]
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        message:
+          type: string
+          nullable: true
+        starts_at:
+          type: string
+          format: date-time
+          nullable: true
+        ends_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Stock:
+      type: object
+      properties:
+        ticker:
+          type: string
+          example: '8058'
+        name:
+          type: string
+        market:
+          type: string
+          enum: [TSE, NYSE, NASDAQ]
+        sector:
+          type: string
+        currency:
+          type: string
+          enum: [JPY, USD]
+
+    StockDetail:
+      allOf:
+        - $ref: '#/components/schemas/Stock'
+        - type: object
+          properties:
+            latest_dividend:
+              $ref: '#/components/schemas/StockDividend'
+            latest_benefit:
+              $ref: '#/components/schemas/StockBenefit'
+
+    StockDividend:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          example: 140
+        currency:
+          type: string
+          enum: [JPY, USD]
+        ex_dividend_date:
+          type: string
+          format: date
+        payment_date:
+          type: string
+          format: date
+        fiscal_period:
+          type: string
+          example: 2025Q4
+
+    StockBenefit:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        record_date:
+          type: string
+          format: date
+        fiscal_period:
+          type: string
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/BenefitTier'
+
+    BenefitTier:
+      type: object
+      properties:
+        min_shares:
+          type: integer
+          example: 100
+        benefit_type:
+          type: string
+        estimated_value:
+          type: number
+          example: 3000
+        description:
+          type: string
+
+    LogEvent:
+      type: object
+      required: [event_id, event_type, timestamp]
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          enum: [page_view, button_tap, error, performance]
+        timestamp:
+          type: string
+          format: date-time
+        platform:
+          type: string
+          enum: [ios, android]
+        app_version:
+          type: string
+        properties:
+          type: object
