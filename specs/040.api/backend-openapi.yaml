@@ -29,7 +29,7 @@ info:
 
     ## エラーレスポンス
     全エンドポイント共通のエラー形式を返します。
-  version: 1.11.0
+  version: 1.11.1
   contact:
     name: Morincum開発チーム
 
@@ -407,8 +407,8 @@ paths:
       summary: プラン情報取得
       description: |
         現在のプラン情報を返します。
-        - `plan_id: 'standard'` → is_premium = true（有料ユーザー）
-        - `plan_id: 'free'` → is_premium = false（無料ユーザー）
+        - `plan_id: 'standard'` → Standardプラン（広告なし）
+        - `plan_id: 'free'` → 無料プラン（AdMob広告あり）
       security:
         - cognitoAuth: []
       responses:
@@ -459,14 +459,14 @@ paths:
       summary: RevenueCat Webhook受信
       description: |
         RevenueCatからのサブスクリプション状態変更イベントを受信します。
-        購入・解約・返金・更新イベントを処理してusersテーブルのis_premiumを更新します。
+        購入・解約・返金・更新イベントを処理してusersテーブルのplan_idを更新します。
 
         ## 受信するイベント
-        - `INITIAL_PURCHASE`：初回購入 → is_premium = true
-        - `RENEWAL`：更新 → is_premium = true（継続）
-        - `CANCELLATION`：解約 → is_premium = false
-        - `EXPIRATION`：有効期限切れ → is_premium = false
-        - `REFUND`：返金 → is_premium = false
+        - `INITIAL_PURCHASE`：初回購入 → plan_id = 'standard'
+        - `RENEWAL`：更新 → plan_id = 'standard'（継続）
+        - `CANCELLATION`：解約 → plan_id = 'free'
+        - `EXPIRATION`：有効期限切れ → plan_id = 'free'
+        - `REFUND`：返金 → plan_id = 'free'
 
         ## 認証
         RevenueCatのWebhook Secretをヘッダーで検証します。
@@ -2370,8 +2370,8 @@ components:
           enum: [free, standard]
           description: |
             現在のプランID。
-            - `free`: 無料ユーザー（is_premium = false）
-            - `standard`: 有料ユーザー（is_premium = true）
+            - `free`: 無料ユーザー（AdMob広告あり）
+            - `standard`: Standardプラン（広告なし）
           example: free
         has_shown_downgrade_message:
           type: boolean
