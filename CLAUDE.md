@@ -68,3 +68,15 @@ feature/<issue番号>-<説明> ブランチを各リポジトリで作成
 2. **既存ファイルは保護する** — 既存ファイルを削除せず、内容は統合・追記する形で更新します
 3. **構成に従って追加する** — 新しい仕様書は `specs/` 以下の適切なディレクトリに追加します
 4. **ソース追跡** — 各ファイルは各リポジトリの既存ドキュメントから統合・集約したものです
+
+## API仕様書の同期ルール
+
+`specs/040.api/` 以下の OpenAPI ファイルは、各リポジトリの仕様書と**常に同一内容**を保ちます。
+
+| Specs ファイル | 同期元 |
+|---|---|
+| `specs/040.api/backend-openapi.yaml` | `Morincum-backend/docs/api/openapi.yaml` |
+| `specs/040.api/batch-openapi.yaml` | `Morincum-batch/docs/api/openapi.yaml` |
+
+**Specsが最新仕様の正（Single Source of Truth）です。**  
+各リポジトリで openapi.yaml を更新したら、同じコミットまたは同じ PR で Specs も更新してください。
