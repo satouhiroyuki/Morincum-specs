@@ -173,6 +173,8 @@ border: 1px solid border (#D8EAD8)
 
 ### 6-2. プライマリボタン
 
+**Active（通常状態）**
+
 ```
 background: linear-gradient(135deg, #5BAD60, #388E3C)
 color: bg (#F4F7F4)
@@ -181,6 +183,21 @@ padding: 12〜14px 0
 fontWeight: 800
 fontSize: 13〜14px
 ```
+
+**Disabled（押せない状態）**
+
+```
+background: border (#D8EAD8)
+color: #AABFAA
+borderRadius: 12px
+padding: 12〜14px 0
+fontWeight: 800
+fontSize: 13〜14px
+```
+
+- 背景をテーマの `border` 色（`#D8EAD8`）に、文字をくすんだ緑（`#AABFAA`）にする
+- グラデーションは適用しない（単色）
+- 使用場面: 必須入力が未入力の場合、処理中の二重送信防止など
 
 ### 6-3. セカンダリボタン
 
