@@ -577,3 +577,54 @@ borderBottom: 1px solid border (#D8EAD8)
 | 残枠あり | 通常表示（`nisa1` / `nisa2` カラー） |
 | 残枠わずか（10%以下） | `gold (#F5A623)` に切替 + ⚠️ アイコン |
 | 枠超過 | `red (#E05C7A)` に切替 + エラーメッセージ |
+
+---
+
+## 21. カラーテーマバリエーション
+
+現行はグリーンテーマを採用。将来的なテーマ切替に備え、ブルー・パープル・レッドのカラーパレットを定義する。
+各テーマは同一のトークン構造を持ち、`accent` を差し替えることで全体のトーンが切り替わる設計。
+
+### 21-1. パレット比較表
+
+| トークン | GREEN（現行） | BLUE | PURPLE | RED |
+|---------|--------------|------|--------|-----|
+| `accent` | `#5BAD60` | `#4A7FD9` | `#7B5EA7` | `#D95A5A` |
+| `accentSoft` | `#5BAD6020` | `#4A7FD920` | `#7B5EA720` | `#D95A5A20` |
+| `gold` | `#F5A623` | `#F5A623` | `#F5A623` | `#F5A623` |
+| `goldSoft` | `#F5A62320` | `#F5A62320` | `#F5A62320` | `#F5A62320` |
+| `nisa1` | `#4A90D9` | `#5BAD60` | `#4A90D9` | `#4A90D9` |
+| `nisa2` | `#9B7FD4` | `#6C5BD9` | `#5BAD60` | `#D98A4A` |
+| `usd` | `#5BAD60` | `#5BAD60` | `#5BAD60` | `#5BAD60` |
+| `red` | `#E05C7A` | `#E05C7A` | `#E05C7A` | `#5BAD60`（※） |
+| `bg` | `#F4F7F4` | `#F4F6FA` | `#F6F4FA` | `#FAF4F4` |
+| `surface` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` |
+| `card` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` |
+| `border` | `#D8EAD8` | `#D0DCE8` | `#DCD0E8` | `#E8D0D0` |
+| `text` | `#2D4A2D` | `#2D3A4A` | `#3A2D4A` | `#4A2D2D` |
+| `muted` | `#7A9A7A` | `#7A8A9A` | `#8A7A9A` | `#9A7A7A` |
+
+※ RED テーマでは `accent` と `red`（エラー色）が近いため、エラー表示には緑（`#5BAD60`）を使用して区別する。
+
+### 21-2. グラデーション比較
+
+| 用途 | GREEN | BLUE | PURPLE | RED |
+|------|-------|------|--------|-----|
+| メインボタン | `#5BAD60 → #388E3C` | `#4A7FD9 → #2E5CB8` | `#7B5EA7 → #5A3D8A` | `#D95A5A → #B83E3E` |
+| 進捗バー | `#5BAD60 → #F5A623` | `#4A7FD9 → #F5A623` | `#7B5EA7 → #F5A623` | `#D95A5A → #F5A623` |
+
+### 21-3. Disabled ボタン比較
+
+| テーマ | 背景 | 文字色 |
+|--------|------|--------|
+| GREEN | `#D8EAD8` | `#AABFAA` |
+| BLUE | `#D0DCE8` | `#A0B0C0` |
+| PURPLE | `#DCD0E8` | `#B0A0C0` |
+| RED | `#E8D0D0` | `#C0A0A0` |
+
+### 21-4. 設計方針
+
+- `gold`（目標色）と `surface` / `card` は全テーマ共通とし、一貫性を保つ
+- `bg` / `border` / `text` / `muted` は accent のトーンに合わせた同系色を使用
+- テーマ切替は `theme` オブジェクトのトークン値を差し替えるだけで実現可能
+- Figma 参照: [カラーテーマ比較（4テーマ）](https://www.figma.com/design/TxS2zCh42b2IT0J9wAvKQU?node-id=56-2)
