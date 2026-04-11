@@ -29,7 +29,7 @@ info:
 
     ## エラーレスポンス
     全エンドポイント共通のエラー形式を返します。
-  version: 1.11.1
+  version: 1.12.0
   contact:
     name: Morincum開発チーム
 
@@ -400,6 +400,46 @@ paths:
   # ==========================================
   # プラン情報
   # ==========================================
+
+  /guest/plans:
+    get:
+      tags: [users]
+      summary: 利用可能プラン一覧取得
+      description: |
+        利用可能なプラン定義（フリープラン・スタンダードプラン）の静的情報を返します。
+        認証不要のため、未ログインユーザーにもプラン比較画面を表示できます。
+      security: []
+      responses:
+        '200':
+          description: プラン一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plans:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlanInfo'
+              example:
+                plans:
+                  - plan_id: free
+                    name: フリープラン
+                    name_en: Free Plan
+                    price_monthly_jpy: 0
+                    max_accounts: 1
+                    features:
+                      csv_export: false
+                      hide_ads: false
+                  - plan_id: standard
+                    name: スタンダードプラン
+                    name_en: Standard Plan
+                    price_monthly_jpy: 480
+                    price_yearly_jpy: 4800
+                    max_accounts: 3
+                    features:
+                      csv_export: true
+                      hide_ads: true
 
   /user/plan:
     get:
@@ -2362,6 +2402,45 @@ components:
           type: string
           description: MFA検証に使用するセッショントークン
 
+    PlanInfo:
+      type: object
+      description: プラン定義（静的データ）
+      properties:
+        plan_id:
+          type: string
+          enum: [free, standard]
+          description: プランID
+          example: free
+        name:
+          type: string
+          description: プラン名（日本語）
+          example: フリープラン
+        name_en:
+          type: string
+          description: プラン名（英語）
+          example: Free Plan
+        price_monthly_jpy:
+          type: integer
+          description: 月額料金（円）
+          example: 0
+        price_yearly_jpy:
+          type: integer
+          description: 年額料金（円）
+          example: 0
+        max_accounts:
+          type: integer
+          description: 管理できる口座数の上限
+          example: 1
+        features:
+          type: object
+          properties:
+            csv_export:
+              type: boolean
+              description: CSVエクスポート機能の有無
+            hide_ads:
+              type: boolean
+              description: 広告非表示の有無
+
     UserPlan:
       type: object
       properties:
@@ -2377,6 +2456,12 @@ components:
           type: boolean
           description: ダウングレード通知モーダルを表示済みかどうか
           example: false
+        next_renewal_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 次回更新日時（Standardプランのみ。Freeプランは null）
+          example: "2026-05-11T00:00:00Z"
 
     User:
       type: object
