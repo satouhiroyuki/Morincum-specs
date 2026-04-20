@@ -274,6 +274,32 @@ StorageStack / LogStack / NotificationStack
 | BatchStorageStack | S3バケット（中間データ用） |
 | BatchApiStack | API Gateway（Slack受信用） |
 
+### 8.1 VPCエンドポイント構成
+
+バックエンドの Lambda は NAT Gateway なし（`natGatewayCount=0`）のプライベートサブネット（`PRIVATE_WITH_EGRESS`）に配置される。
+インターネット経由での AWS サービスアクセスは不可能なため、以下の VPC エンドポイントを設定している。
+
+| エンドポイント | 種別 | 対象サービス | 用途 |
+|---|---|---|---|
+| `SecretsManagerEndpoint` | Interface | Secrets Manager | Lambda が DB 認証情報を取得 |
+| `SsmEndpoint` | Interface | SSM Parameter Store | Lambda が Webhook シークレット等を取得 |
+| `S3Endpoint` | Gateway（無料） | S3 | バッチデータ・Firehose アクセス |
+
+> **設計方針**: NAT Gateway は月額 ~$33 のコストが発生するため、バックエンド API では VPC エンドポイントのみで AWS サービスにアクセスする。
+> バッチ処理（外部 API への HTTP リクエストが必要）は別 VPC で NAT Gateway を使用する。
+
+#### セキュリティグループ
+
+VPC エンドポイント用に専用 SG（`morincum-vpce-sg-{env}`）を作成し、Lambda SG からの HTTPS/443 インバウンドのみを許可している。
+
+```typescript
+vpcEndpointSecurityGroup.addIngressRule(
+  lambdaSecurityGroup,
+  ec2.Port.tcp(443),
+  'Allow Lambda to reach VPC Interface Endpoints',
+);
+```
+
 ### デプロイコマンド
 
 ```bash
