@@ -268,11 +268,12 @@ StorageStack / LogStack / NotificationStack
 
 | Stack | 主なリソース |
 |---|---|
-| BatchNetworkStack | VPC・NAT Gateway（1台）・セキュリティグループ |
-| BatchComputeStack | Lambda関数群（Python・ARM64）・IAMロール |
+| BatchComputeStack | Lambda関数群（Python・VPC外）・IAMロール |
 | BatchSchedulerStack | EventBridge Scheduler（prodのみ有効） |
 | BatchStorageStack | S3バケット（中間データ用） |
 | BatchApiStack | API Gateway（Slack受信用） |
+
+> BatchNetworkStack（VPC・NAT Gateway）は廃止。全接続先がパブリックURLのため VPC 不要。NAT Gateway 費用（約 $45/月）を削減。
 
 ### デプロイコマンド
 
@@ -292,11 +293,11 @@ cdk deploy --all -c env=dev
 |---|---|---|
 | RDS db.t3.micro | ~$18 | — |
 | Lambda + API Gateway | $0（無料枠内） | ~$1 |
-| NAT Gateway | — | ~$33 |
+| ~~NAT Gateway~~ | — | **$0**（廃止） |
 | S3 | ~$1 | ~$0.5 |
 | Cognito（〜50,000 MAU） | $0 | — |
 | Claude API | ~$1〜3 | ~$3〜5 |
-| **合計** | **~$21〜24/月** | **~$38〜43/月** |
+| **合計** | **~$21〜24/月** | **~$5〜10/月** |
 
 ---
 
