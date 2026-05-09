@@ -268,37 +268,12 @@ StorageStack / LogStack / NotificationStack
 
 | Stack | 主なリソース |
 |---|---|
-| BatchNetworkStack | VPC・NAT Gateway（1台）・セキュリティグループ |
-| BatchComputeStack | Lambda関数群（Python・ARM64）・IAMロール |
+| BatchComputeStack | Lambda関数群（Python・VPC外）・IAMロール |
 | BatchSchedulerStack | EventBridge Scheduler（prodのみ有効） |
 | BatchStorageStack | S3バケット（中間データ用） |
 | BatchApiStack | API Gateway（Slack受信用） |
 
-### 8.1 VPCエンドポイント構成
-
-バックエンドの Lambda は NAT Gateway なし（`natGatewayCount=0`）のプライベートサブネット（`PRIVATE_WITH_EGRESS`）に配置される。
-インターネット経由での AWS サービスアクセスは不可能なため、以下の VPC エンドポイントを設定している。
-
-| エンドポイント | 種別 | 対象サービス | 用途 |
-|---|---|---|---|
-| `SecretsManagerEndpoint` | Interface | Secrets Manager | Lambda が DB 認証情報を取得 |
-| `SsmEndpoint` | Interface | SSM Parameter Store | Lambda が Webhook シークレット等を取得 |
-| `S3Endpoint` | Gateway（無料） | S3 | バッチデータ・Firehose アクセス |
-
-> **設計方針**: NAT Gateway は月額 ~$33 のコストが発生するため、バックエンド API では VPC エンドポイントのみで AWS サービスにアクセスする。
-> バッチ処理（外部 API への HTTP リクエストが必要）は別 VPC で NAT Gateway を使用する。
-
-#### セキュリティグループ
-
-VPC エンドポイント用に専用 SG（`morincum-vpce-sg-{env}`）を作成し、Lambda SG からの HTTPS/443 インバウンドのみを許可している。
-
-```typescript
-vpcEndpointSecurityGroup.addIngressRule(
-  lambdaSecurityGroup,
-  ec2.Port.tcp(443),
-  'Allow Lambda to reach VPC Interface Endpoints',
-);
-```
+> BatchNetworkStack（VPC・NAT Gateway）は廃止。全接続先がパブリックURLのため VPC 不要。NAT Gateway 費用（約 $45/月）を削減。
 
 ### デプロイコマンド
 
@@ -318,11 +293,11 @@ cdk deploy --all -c env=dev
 |---|---|---|
 | RDS db.t3.micro | ~$18 | — |
 | Lambda + API Gateway | $0（無料枠内） | ~$1 |
-| NAT Gateway | — | ~$33 |
+| ~~NAT Gateway~~ | — | **$0**（廃止） |
 | S3 | ~$1 | ~$0.5 |
 | Cognito（〜50,000 MAU） | $0 | — |
 | Claude API | ~$1〜3 | ~$3〜5 |
-| **合計** | **~$21〜24/月** | **~$38〜43/月** |
+| **合計** | **~$21〜24/月** | **~$5〜10/月** |
 
 ---
 

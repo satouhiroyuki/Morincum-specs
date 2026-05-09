@@ -40,7 +40,7 @@
 | Slack Bot・コマンド | ❌ | ✅ |
 | X API投稿 | ❌ | ✅ |
 | 定期バッチ処理 | ❌ | ✅ |
-| NAT Gateway | 不要 | **必要** |
+| NAT Gateway | 不要 | **不要**（全接続先がパブリックURL） |
 
 ---
 
@@ -97,11 +97,12 @@ Lambda（stock-price-batch）× 1本
 
 | Stack | 主なリソース |
 |---|---|
-| BatchNetworkStack | VPC・NAT Gateway（1台）・セキュリティグループ |
-| BatchComputeStack | Lambda関数群（Python・ARM64）・IAMロール・環境変数 |
+| BatchComputeStack | Lambda関数群（Python）・IAMロール・環境変数 |
 | BatchSchedulerStack | EventBridge Scheduler（prodのみ有効） |
 | BatchStorageStack | S3バケット（中間データ用） |
 | BatchApiStack | API Gateway（Slack受信用・HTTP API） |
+
+> BatchNetworkStack（VPC・NAT Gateway）は廃止。Lambda は VPC 外で動作し、NAT Gateway は不要。
 
 ### 環境構成
 
@@ -109,7 +110,7 @@ Lambda（stock-price-batch）× 1本
 |---|---|
 | Lambdaリソース | **1セットのみ**（3環境分は作らない） |
 | 送り先バックエンドURL | 環境変数 `BACKEND_API_URL` で切り替え |
-| NAT Gateway | **1台のみ**（常時起動・約$33/月） |
+| NAT Gateway | **不要**（Lambda を VPC 外に配置） |
 | EventBridgeスケジュール | **prodのみ有効**（dev・stgは手動実行） |
 
 ### Lambda関数一覧
@@ -391,14 +392,14 @@ morincum-batch-data/
 | サービス | 月額目安 | 備考 |
 |---|---|---|
 | Lambda | ~$0.5 | 無料枠内に収まる可能性高 |
-| NAT Gateway | ~$33 | 1台・常時起動 |
+| ~~NAT Gateway~~ | ~~$33~~ | **廃止**（Lambda VPC撤去により不要） |
 | S3（中間バッファ） | ~$0.5 | |
 | EventBridge Scheduler | ~$0.5 | prodのみ有効 |
 | API Gateway（Slack受信） | ~$0.5 | |
 | Claude API | ~$3〜5 | ニュース・X投稿文・Slack Bot |
 | X API（Phase 2のみ） | $100 | Basicプラン |
-| **Phase 1 合計** | **~$38〜43/月** | **約6,000〜6,800円** |
-| **Phase 2 合計** | **~$138〜143/月** | **約21,900〜22,700円** |
+| **Phase 1 合計** | **~$5〜10/月** | **約800〜1,600円**（NAT GW廃止で大幅削減） |
+| **Phase 2 合計** | **~$105〜110/月** | **約16,700〜17,500円** |
 
 ---
 
