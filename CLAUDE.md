@@ -26,9 +26,57 @@ specs/
 
 索引は [`specs/README.md`](specs/README.md) を参照してください。
 
+## ブランチ運用ルール
+
+### ブランチ命名規則
+
+```
+feature/<specs-issue番号>-<短い説明>
+```
+
+**例:**
+- `feature/12-upgrade-premium-display`
+- `feature/15-batch-dividend-sync`
+- `feature/20-csv-export`
+
+### ルール
+
+1. **Specs の Issue を起点にする** — 作業はすべて Morincum-specs の Issue に紐づける
+2. **全リポジトリで同名ブランチを使う** — 同一 Issue の変更は Morincum / Morincum-backend / Morincum-batch / Morincum-specs で同じブランチ名を使う
+3. **検証可能な状態でコミットする** — 動作確認できる単位でコミットし、中途半端な状態でプッシュしない
+4. **ブランチから PR を作成する** — 作業完了後、各リポジトリで `feature/XXX` → `develop`（または `main`）への PR を作成する
+
+### フロー
+
+```
+Morincum-specs で Issue 作成
+  ↓
+feature/<issue番号>-<説明> ブランチを各リポジトリで作成
+  ↓
+変更が必要なリポジトリにコミット（全リポジトリで同名ブランチ）
+  ↓
+検証可能になったら各リポジトリで PR 作成
+  ↓
+レビュー・マージ → Issue クローズ
+```
+
+---
+
 ## 作業ルール
 
 1. **日本語で記述する** — ドキュメントは基本的に日本語で記述します
 2. **既存ファイルは保護する** — 既存ファイルを削除せず、内容は統合・追記する形で更新します
 3. **構成に従って追加する** — 新しい仕様書は `specs/` 以下の適切なディレクトリに追加します
 4. **ソース追跡** — 各ファイルは各リポジトリの既存ドキュメントから統合・集約したものです
+
+## API仕様書の同期ルール
+
+`specs/040.api/` 以下の OpenAPI ファイルは、各リポジトリの仕様書と**常に同一内容**を保ちます。
+
+| Specs ファイル | 同期元 |
+|---|---|
+| `specs/040.api/backend-openapi.yaml` | `Morincum-backend/docs/api/openapi.yaml` |
+| `specs/040.api/batch-openapi.yaml` | `Morincum-batch/docs/api/openapi.yaml` |
+
+**Specsが最新仕様の正（Single Source of Truth）です。**  
+各リポジトリで openapi.yaml を更新したら、同じコミットまたは同じ PR で Specs も更新してください。

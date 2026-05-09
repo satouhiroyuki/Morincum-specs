@@ -97,6 +97,7 @@ flowchart TB
     subgraph Constants["定数層（src/constants）"]
         Types["型定義\ntypes.ts"]
         Theme["テーマカラー\ntheme.ts"]
+        ThemeCtx["テーマコンテキスト\nThemeContext.tsx"]
     end
 
     UI --> Logic
@@ -152,6 +153,9 @@ sequenceDiagram
 - グローバル状態は `App.tsx` の `useState` で一元管理（Redux 等は未使用）
 - コンポーネントへはすべて `props` で受け渡し
 - DB の変更後は必ず App.tsx でデータを再読み込みして状態を更新する
+- テーマカラーのみ例外で `AppThemeProvider`（React Context）を使用。`useAppTheme()` フックで各コンポーネントから参照する
+
+> テーマシステムの実装詳細（ファクトリパターン）: [theme-system.md](./theme-system.md)
 
 ### 2-5. 依存パッケージ（主要）
 

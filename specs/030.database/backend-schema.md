@@ -1,6 +1,6 @@
 # バックエンド データベーススキーマ
 
-> ソース: Morincum-backend/docs/spec/morincum-spec.md §4
+> ソース: Morincum-backend/docs/spec/morincum-spec.md §4  
 > データベース: PostgreSQL（RDS db.t3.micro）
 
 ---
@@ -9,7 +9,7 @@
 
 | テーブル | 説明 |
 |---|---|
-| users | ユーザー基本情報・属性・preferred_locale |
+| users | ユーザー基本情報・プランID・identityId |
 | user_consents | 利用規約の同意記録（バージョン管理） |
 | terms | 利用規約定義 |
 | terms_translations | 利用規約の多言語翻訳（ja/en） |
@@ -46,7 +46,10 @@
 erDiagram
     users {
         UUID id PK
-        VARCHAR email
+        TEXT identity_id "UNIQUE nullable"
+        VARCHAR email "nullable"
+        VARCHAR plan_id
+        BOOLEAN has_shown_downgrade_message
         VARCHAR age_range
         VARCHAR investment_experience
         VARCHAR preferred_locale
@@ -170,14 +173,21 @@ erDiagram
 
 ### users
 
-| カラム | 型 | 説明 |
-|---|---|---|
-| id | UUID | PK（CognitoのsubをそのままUUIDとして使用） |
-| email | VARCHAR | メールアドレス |
-| age_range | VARCHAR | 年齢層（統計用） |
-| investment_experience | VARCHAR | 投資歴 |
-| preferred_locale | VARCHAR | `ja` / `en` |
-| created_at | TIMESTAMP | 登録日時 |
+| カラム | 型 | NULL | 説明 |
+|---|---|---|---|
+| id | UUID | NOT NULL | PK。購入後は Cognito User Pool の sub。購入前は `uuid_generate_v4()` で生成 |
+| identity_id | TEXT | UNIQUE, nullable | Cognito Identity Pool の identityId。購入前ユーザーの RevenueCat 連携キー |
+| email | VARCHAR | nullable | メールアドレス。購入後（Cognito User Pool 登録後）にのみ設定される |
+| plan_id | VARCHAR | NOT NULL | プランID: `'free'`（デフォルト）/ `'standard'` |
+| has_shown_downgrade_message | BOOLEAN | NOT NULL | ダウングレード通知表示済みフラグ（デフォルト false） |
+| age_range | VARCHAR | nullable | 年齢層（統計用） |
+| investment_experience | VARCHAR | nullable | 投資歴 |
+| preferred_locale | VARCHAR | nullable | `ja` / `en` |
+| created_at | TIMESTAMP | NOT NULL | 登録日時 |
+
+> **V012 変更点（Morincum-backend #135）**  
+> - `identity_id TEXT UNIQUE` カラム追加  
+> - `email` を nullable に変更（購入前のプリレコード対応）
 
 ### user_portfolio_summaries
 
@@ -217,6 +227,16 @@ erDiagram
 | reviewed_at | TIMESTAMP | 承認・却下日時 |
 | posted_at | TIMESTAMP | X投稿日時 |
 | x_post_id | VARCHAR | XのポストID（Phase 2で使用） |
+
+---
+
+## マイグレーション履歴（抜粋）
+
+| バージョン | 内容 |
+|---|---|
+| V001〜V010 | 初期スキーマ構築 |
+| V011 | `users.plan_id` 追加・`users.has_shown_downgrade_message` 追加（`is_premium` 廃止） |
+| V012 | `users.identity_id TEXT UNIQUE` 追加・`users.email` を nullable に変更 |
 
 ---
 

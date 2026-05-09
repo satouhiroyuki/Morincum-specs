@@ -173,6 +173,8 @@ border: 1px solid border (#D8EAD8)
 
 ### 6-2. プライマリボタン
 
+**Active（通常状態）**
+
 ```
 background: linear-gradient(135deg, #5BAD60, #388E3C)
 color: bg (#F4F7F4)
@@ -181,6 +183,21 @@ padding: 12〜14px 0
 fontWeight: 800
 fontSize: 13〜14px
 ```
+
+**Disabled（押せない状態）**
+
+```
+background: border (#D8EAD8)
+color: #AABFAA
+borderRadius: 12px
+padding: 12〜14px 0
+fontWeight: 800
+fontSize: 13〜14px
+```
+
+- 背景をテーマの `border` 色（`#D8EAD8`）に、文字をくすんだ緑（`#AABFAA`）にする
+- グラデーションは適用しない（単色）
+- 使用場面: 必須入力が未入力の場合、処理中の二重送信防止など
 
 ### 6-3. セカンダリボタン
 
@@ -560,3 +577,57 @@ borderBottom: 1px solid border (#D8EAD8)
 | 残枠あり | 通常表示（`nisa1` / `nisa2` カラー） |
 | 残枠わずか（10%以下） | `gold (#F5A623)` に切替 + ⚠️ アイコン |
 | 枠超過 | `red (#E05C7A)` に切替 + エラーメッセージ |
+
+---
+
+## 21. カラーテーマバリエーション
+
+現行はグリーンテーマを採用。将来的なテーマ切替に備え、ティール・ブルー・パープル・レッド・アンバーのカラーパレットを定義する。
+色相環上で均等に配置し（Green 120° / Teal 180° / Blue 220° / Purple 280° / Red 0° / Amber 35°）、どのテーマ同士でも視認性を確保する。
+各テーマは同一のトークン構造を持ち、`accent` を差し替えることで全体のトーンが切り替わる設計。
+
+### 21-1. パレット比較表
+
+| トークン | GREEN（現行） | TEAL | BLUE | PURPLE | RED | AMBER |
+|---------|--------------|------|------|--------|-----|-------|
+| `accent` | `#5BAD60` | `#2BAAAA` | `#4A7FD9` | `#7B5EA7` | `#D95A5A` | `#D9883A` |
+| `accentSoft` | `#5BAD6020` | `#2BAAAA20` | `#4A7FD920` | `#7B5EA720` | `#D95A5A20` | `#D9883A20` |
+| `gold` | `#F5A623` | `#F5A623` | `#F5A623` | `#F5A623` | `#F5A623` | `#F5A623` |
+| `goldSoft` | `#F5A62320` | `#F5A62320` | `#F5A62320` | `#F5A62320` | `#F5A62320` | `#F5A62320` |
+| `nisa1` | `#4A90D9` | `#4A90D9` | `#5BAD60` | `#4A90D9` | `#4A90D9` | `#4A90D9` |
+| `nisa2` | `#9B7FD4` | `#5BAD60` | `#6C5BD9` | `#5BAD60` | `#D98A4A` | `#5BAD60` |
+| `usd` | `#5BAD60` | `#5BAD60` | `#5BAD60` | `#5BAD60` | `#5BAD60` | `#5BAD60` |
+| `red` | `#E05C7A` | `#E05C7A` | `#E05C7A` | `#E05C7A` | `#5BAD60`（※1） | `#E05C7A` |
+| `bg` | `#F4F7F4` | `#F4FAFA` | `#F4F6FA` | `#F6F4FA` | `#FAF4F4` | `#FAF6F4` |
+| `surface` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` |
+| `card` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` |
+| `border` | `#D8EAD8` | `#D0E8E8` | `#D0DCE8` | `#DCD0E8` | `#E8D0D0` | `#E8DCD0` |
+| `text` | `#2D4A2D` | `#2D4A4A` | `#2D3A4A` | `#3A2D4A` | `#4A2D2D` | `#4A3A2D` |
+| `muted` | `#7A9A7A` | `#7A9A9A` | `#7A8A9A` | `#8A7A9A` | `#9A7A7A` | `#9A8A7A` |
+
+※1 RED テーマでは `accent` と `red`（エラー色）が近いため、エラー表示には緑（`#5BAD60`）を使用して区別する。
+
+### 21-2. グラデーション比較
+
+| 用途 | GREEN | TEAL | BLUE | PURPLE | RED | AMBER |
+|------|-------|------|------|--------|-----|-------|
+| メインボタン | `#5BAD60 → #388E3C` | `#2BAAAA → #1D8080` | `#4A7FD9 → #2E5CB8` | `#7B5EA7 → #5A3D8A` | `#D95A5A → #B83E3E` | `#D9883A → #B06A28` |
+| 進捗バー | `#5BAD60 → #F5A623` | `#2BAAAA → #F5A623` | `#4A7FD9 → #F5A623` | `#7B5EA7 → #F5A623` | `#D95A5A → #F5A623` | `#D9883A → #F5A623` |
+
+### 21-3. Disabled ボタン比較
+
+| テーマ | 背景 | 文字色 |
+|--------|------|--------|
+| GREEN | `#D8EAD8` | `#AABFAA` |
+| TEAL | `#D0E8E8` | `#A0C0C0` |
+| BLUE | `#D0DCE8` | `#A0B0C0` |
+| PURPLE | `#DCD0E8` | `#B0A0C0` |
+| RED | `#E8D0D0` | `#C0A0A0` |
+| AMBER | `#E8DCD0` | `#C0B0A0` |
+
+### 21-4. 設計方針
+
+- `gold`（目標色）と `surface` / `card` は全テーマ共通とし、一貫性を保つ
+- `bg` / `border` / `text` / `muted` は accent のトーンに合わせた同系色を使用
+- テーマ切替は `theme` オブジェクトのトークン値を差し替えるだけで実現可能
+- Figma 参照: [カラーテーマ比較（6テーマ）](https://www.figma.com/design/TxS2zCh42b2IT0J9wAvKQU?node-id=70-2)
