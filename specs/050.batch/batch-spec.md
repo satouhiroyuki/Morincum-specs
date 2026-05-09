@@ -111,7 +111,7 @@ Lambda（stock-price-batch）× 1本
 | Lambdaリソース | **1セットのみ**（3環境分は作らない） |
 | 送り先バックエンドURL | 環境変数 `BACKEND_API_URL` で切り替え |
 | NAT Gateway | **不要**（Lambda を VPC 外に配置） |
-| EventBridgeスケジュール | **prodのみ有効**（dev・stgは手動実行） |
+| EventBridgeスケジュール | **prod**: 各バッチ個別スケジュール / **dev**: 全バッチ平日17:00 JST一括実行 |
 
 ### Lambda関数一覧
 
