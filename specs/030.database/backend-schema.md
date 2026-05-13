@@ -13,11 +13,11 @@
 | user_consents | 利用規約の同意記録（バージョン管理） |
 | terms | 利用規約定義 |
 | terms_translations | 利用規約の多言語翻訳（ja/en） |
-| surveys | アンケート定義 |
-| survey_translations | アンケートタイトルの多言語翻訳（ja/en） |
-| survey_questions | 設問 |
-| survey_question_translations | 設問文の多言語翻訳（ja/en） |
-| user_survey_answers | ユーザーの回答（JSONB） |
+| surveys | アンケート定義（status: draft/active/closed） |
+| survey_questions | 設問（single_choice/multiple_choice/text） |
+| survey_options | 選択肢 |
+| survey_responses | 回答セット（1ユーザー×1アンケート・UNIQUE制約で二重回答防止） |
+| survey_answers | 個別回答（選択肢IDまたは自由記述テキスト） |
 | user_portfolio_summaries | ユーザーごとの月次集計（配当金合計・業界割合） |
 | maintenances | メンテナンス定義 |
 | maintenance_translations | メンテナンス情報の多言語翻訳（ja/en） |
@@ -78,34 +78,40 @@ erDiagram
     }
     surveys {
         UUID id PK
-        VARCHAR version
-        BOOLEAN is_active
-        TIMESTAMP created_at
-    }
-    survey_translations {
-        UUID id PK
-        UUID survey_id FK
-        VARCHAR locale
         VARCHAR title
+        TEXT description
+        VARCHAR status
+        TIMESTAMPTZ starts_at
+        TIMESTAMPTZ ends_at
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
     }
     survey_questions {
         UUID id PK
         UUID survey_id FK
-        VARCHAR question_type
-        INT sort_order
-    }
-    survey_question_translations {
-        UUID id PK
-        UUID question_id FK
-        VARCHAR locale
         TEXT question_text
+        VARCHAR question_type
+        INT display_order
+        TIMESTAMPTZ created_at
     }
-    user_survey_answers {
+    survey_options {
         UUID id PK
-        UUID user_id FK
         UUID question_id FK
-        JSONB answer
-        TIMESTAMP answered_at
+        TEXT option_text
+        INT display_order
+    }
+    survey_responses {
+        UUID id PK
+        UUID survey_id FK
+        UUID user_id
+        TIMESTAMPTZ submitted_at
+    }
+    survey_answers {
+        UUID id PK
+        UUID response_id FK
+        UUID question_id FK
+        UUID option_id FK
+        TEXT text_answer
     }
     user_portfolio_summaries {
         UUID id PK
@@ -156,14 +162,15 @@ erDiagram
     }
 
     users ||--o{ user_consents : "同意記録"
-    users ||--o{ user_survey_answers : "回答"
+    surveys ||--o{ survey_responses : "回答セット"
+    survey_responses ||--o{ survey_answers : "個別回答"
     users ||--o{ user_portfolio_summaries : "ポートフォリオ集計"
     terms ||--o{ terms_translations : "翻訳"
     user_consents }o--|| terms : "対象規約"
-    surveys ||--o{ survey_translations : "翻訳"
     surveys ||--o{ survey_questions : "設問"
-    survey_questions ||--o{ survey_question_translations : "翻訳"
-    survey_questions ||--o{ user_survey_answers : "回答対象"
+    survey_questions ||--o{ survey_options : "選択肢"
+    survey_questions ||--o{ survey_answers : "対象設問"
+    survey_options ||--o{ survey_answers : "選択した選択肢"
     maintenances ||--o{ maintenance_translations : "翻訳"
 ```
 
