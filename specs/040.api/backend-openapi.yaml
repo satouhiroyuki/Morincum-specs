@@ -642,24 +642,38 @@ paths:
     get:
       tags: [surveys]
       summary: 有効なアンケート取得
-      description: 現在有効なアンケートと設問一覧を取得します。
-      parameters:
-        - $ref: '#/components/parameters/locale'
+      description: |
+        現在有効なアンケートと設問一覧を取得します。
+        回答済みまたはアクティブなアンケートがない場合は `survey: null` を返します。
+      security:
+        - cognitoAuth: []
       responses:
         '200':
-          description: アンケート情報
+          description: アンケート情報（null の場合は表示不要）
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Survey'
+                type: object
+                properties:
+                  survey:
+                    nullable: true
+                    oneOf:
+                      - $ref: '#/components/schemas/Survey'
+                      - type: 'null'
+                example:
+                  survey: null
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /surveys/{survey_id}/answers:
+  /surveys/{survey_id}/responses:
     post:
       tags: [surveys]
       summary: アンケート回答送信
-      description: アンケートへの回答を送信します。
+      description: |
+        アンケートへの回答を送信します。全問任意のため、未回答の設問はリクエストに含めなくてよいです。
+        同一ユーザーの二重送信は 409 を返します。
+      security:
+        - cognitoAuth: []
       parameters:
         - name: survey_id
           in: path
@@ -673,24 +687,29 @@ paths:
           application/json:
             schema:
               type: object
-              required: [answers]
               properties:
                 answers:
                   type: array
                   items:
                     type: object
-                    required: [question_id, answer]
+                    required: [question_id]
                     properties:
                       question_id:
                         type: string
                         format: uuid
-                      answer:
-                        description: 回答内容（単一選択・複数選択・自由入力に対応）
-                        oneOf:
-                          - type: string
-                          - type: array
-                            items:
-                              type: string
+                      option_id:
+                        type: string
+                        format: uuid
+                        description: 単一選択の場合
+                      option_ids:
+                        type: array
+                        items:
+                          type: string
+                          format: uuid
+                        description: 複数選択の場合
+                      text_answer:
+                        type: string
+                        description: 自由記述または allows_text_input=true の選択肢に付随するテキスト
       responses:
         '201':
           description: 回答送信成功
@@ -706,6 +725,12 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: アンケートが存在しないまたはアクティブでない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '409':
           description: 既に回答済み
           content:
@@ -1805,6 +1830,188 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /internal/surveys:
+    post:
+      tags: [surveys]
+      summary: アンケート作成
+      description: |
+        新しいアンケートを `draft` 状態で作成します。
+        設問は最大10件、選択肢は1設問あたり最大10件まで。
+      security:
+        - iamAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, questions]
+              properties:
+                title:
+                  type: string
+                  example: アプリ満足度アンケート
+                description:
+                  type: string
+                  example: より良いサービスのためにご回答ください。
+                starts_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                ends_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                questions:
+                  type: array
+                  maxItems: 10
+                  items:
+                    type: object
+                    required: [question_text, question_type, display_order]
+                    properties:
+                      question_text:
+                        type: string
+                      question_type:
+                        type: string
+                        enum: [single_choice, multiple_choice, text]
+                      display_order:
+                        type: integer
+                      options:
+                        type: array
+                        maxItems: 10
+                        items:
+                          type: object
+                          required: [option_text, display_order]
+                          properties:
+                            option_text:
+                              type: string
+                            display_order:
+                              type: integer
+                            allows_text_input:
+                              type: boolean
+                              default: false
+      responses:
+        '201':
+          description: アンケート作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  survey_id:
+                    type: string
+                    format: uuid
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /internal/surveys/{survey_id}:
+    patch:
+      tags: [surveys]
+      summary: アンケートステータス変更
+      description: |
+        アンケートのステータスを変更します。
+        `closed` に変更した際は集計結果を Slack に通知します。
+      security:
+        - iamAuth: []
+      parameters:
+        - name: survey_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [draft, active, closed]
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  survey_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [draft, active, closed]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /internal/surveys/{survey_id}/results:
+    get:
+      tags: [surveys]
+      summary: アンケート集計結果取得
+      description: アンケートの集計結果を取得します。
+      security:
+        - iamAuth: []
+      parameters:
+        - name: survey_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 集計結果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  survey_id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  total_responses:
+                    type: integer
+                    example: 42
+                  questions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        question_text:
+                          type: string
+                        question_type:
+                          type: string
+                          enum: [single_choice, multiple_choice, text]
+                        answered_count:
+                          type: integer
+                        options:
+                          type: array
+                          description: single_choice / multiple_choice の場合
+                          items:
+                            type: object
+                            properties:
+                              option_text:
+                                type: string
+                              count:
+                                type: integer
+                              percentage:
+                                type: number
+                                example: 47.4
+                        text_answers:
+                          type: array
+                          description: text の場合
+                          items:
+                            type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /internal/stats/surveys:
     get:
       tags: [stats]
@@ -2448,10 +2655,11 @@ components:
           format: uuid
         title:
           type: string
-          example: 投資スタイルアンケート
-        version:
+          example: アプリ満足度アンケート
+        description:
           type: string
-          example: v1.0
+          nullable: true
+          example: より良いサービスのためにご回答ください。
         questions:
           type: array
           items:
@@ -2465,18 +2673,35 @@ components:
           format: uuid
         question_text:
           type: string
-          example: 投資歴を教えてください
+          example: 配当の森をどのくらいの頻度で使っていますか？
         question_type:
           type: string
-          enum: [single, multi, free_text]
-        sort_order:
+          enum: [single_choice, multiple_choice, text]
+        display_order:
           type: integer
+          example: 1
         options:
           type: array
-          description: single・multi の場合の選択肢
+          description: single_choice / multiple_choice の場合の選択肢（text の場合は空配列）
           items:
-            type: string
-          example: [1年未満, 1〜3年, 3〜5年, 5年以上]
+            $ref: '#/components/schemas/SurveyOption'
+
+    SurveyOption:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        option_text:
+          type: string
+          example: 週に数回
+        display_order:
+          type: integer
+          example: 2
+        allows_text_input:
+          type: boolean
+          description: true の場合、この選択肢を選んだときにテキスト入力欄を表示する（「その他」など）
+          example: false
 
     Terms:
       type: object
