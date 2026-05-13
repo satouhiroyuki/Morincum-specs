@@ -44,7 +44,7 @@ feature/<specs-issue番号>-<短い説明>
 1. **Specs の Issue を起点にする** — 作業はすべて Morincum-specs の Issue に紐づける
 2. **全リポジトリで同名ブランチを使う** — 同一 Issue の変更は Morincum / Morincum-backend / Morincum-batch / Morincum-specs で同じブランチ名を使う
 3. **検証可能な状態でコミットする** — 動作確認できる単位でコミットし、中途半端な状態でプッシュしない
-4. **ブランチから PR を作成する** — 作業完了後、各リポジトリで `feature/XXX` → `develop`（または `main`）への PR を作成する
+4. **ブランチから PR を作成する** — 作業完了後、各リポジトリで `feature/XXX` → `develop` → `main` の順でマージする
 
 ### フロー
 
@@ -55,10 +55,23 @@ feature/<issue番号>-<説明> ブランチを各リポジトリで作成
   ↓
 変更が必要なリポジトリにコミット（全リポジトリで同名ブランチ）
   ↓
-検証可能になったら各リポジトリで PR 作成
+各リポジトリで feature → develop への PR を作成・マージ（dev環境で検証）
   ↓
-レビュー・マージ → Issue クローズ
+develop → main への PR を作成・マージ（本番リリース）
+  ↓
+Issue クローズ
 ```
+
+### ブランチ保護ルール
+
+全リポジトリの `main` と `develop` に以下の保護を設定している。
+
+| 設定 | 内容 |
+|---|---|
+| 削除禁止 | `main` / `develop` は削除不可 |
+| Force push禁止 | 強制プッシュ不可 |
+
+> `develop` が誤って削除された場合は `main` から再作成し、GitHub の Branch protection rules で再設定する。
 
 ---
 
