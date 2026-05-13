@@ -99,6 +99,9 @@ survey_responses（回答セット：1ユーザー×1アンケート）
 | question_id | UUID FK | |
 | option_text | TEXT | 選択肢テキスト |
 | display_order | INT | 表示順 |
+| allows_text_input | BOOLEAN | 「その他」などテキスト入力欄を表示するか（デフォルト false） |
+
+> `allows_text_input = true` の選択肢を選んだ場合、`survey_answers` の `option_id` と `text_answer` を両方セットする。
 
 #### survey_responses
 
@@ -132,6 +135,17 @@ erDiagram
   survey_questions ||--o{ survey_answers : "対象設問"
   survey_options ||--o{ survey_answers : "選択した選択肢"
 ```
+
+---
+
+## 4.4 制約・バリデーション
+
+| 項目 | 制約 | エラー |
+|---|---|---|
+| 選択肢数 | 1設問あたり最大10件 | 400 Bad Request |
+| 設問数 | 1アンケートあたり最大10件 | 400 Bad Request |
+
+> 制約はAPIレベル（`POST /internal/surveys`）で検証する。DBにはCHECK制約を設けない。
 
 ---
 
@@ -330,9 +344,37 @@ Q2. 改善してほしい点（4件回答）
 
 ---
 
-## 7. 実装フェーズ
+## 7. オフライン時の挙動
+
+### 方針: ローカル保存 → 自動送信
+
+回答送信（`POST /surveys/{id}/responses`）が通信エラーで失敗した場合、回答データを端末のローカルストレージ（AsyncStorage）に一時保存し、ネットワーク復旧後に自動で再送する。
+
+```
+回答送信
+  ↓
+通信成功 → 完了
+  ↓
+通信失敗 → AsyncStorage に回答データを保存
+  ↓
+ネットワーク復旧を検知 → 自動リトライ
+  ↓
+送信成功 → AsyncStorage からデータを削除
+```
+
+### 二重送信の防止
+
+`survey_responses` の `UNIQUE(survey_id, user_id)` 制約により、同一ユーザーが同一アンケートに二重送信しても `409 Conflict` を返すだけで安全に処理できる。
+
+### スキップ時の扱い
+
+アンケートをスキップした場合は `survey_responses` に記録しない。アプリ内フラグ（AsyncStorage）で「このアンケートはスキップ済み」を管理し、再起動後も再表示しない。
+
+---
+
+## 8. 実装フェーズ
 
 | Phase | 内容 |
 |---|---|
-| Phase 1 | DB migration・API実装・フロントカード表示・Slack通知（回答ごと＋クローズ時集計） |
+| Phase 1 | DB migration・API実装・フロントカード表示・Slack通知（回答ごと＋クローズ時集計）・オフライン対応（AsyncStorage） |
 | Phase 2 | 管理画面（アンケート作成・結果グラフ表示）・プッシュ通知 |

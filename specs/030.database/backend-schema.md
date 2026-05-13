@@ -99,6 +99,7 @@ erDiagram
         UUID question_id FK
         TEXT option_text
         INT display_order
+        BOOLEAN allows_text_input "DEFAULT false"
     }
     survey_responses {
         UUID id PK
