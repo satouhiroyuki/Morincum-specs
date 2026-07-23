@@ -126,9 +126,65 @@ Morincum-backend Lambda
 |---|---|---|
 | `GET /user/plan` | Cognito JWT Bearer | 購入済みユーザーのプラン情報取得 |
 | `POST /webhooks/revenuecat` | RevenueCat API Key | RevenueCat からの購入通知受信 |
+| `POST /user/plan/restore` | Cognito JWT Bearer | 再インストール後のサブスク復元 |
 
 > **注意**: `GET /user/plan` はゲスト認証（SigV4）ではなく Cognito User Pool JWT 認証エンドポイントです。  
 > 購入前のゲストユーザーはアクセスできないため、フロントエンドは JWT 取得失敗時は `plan_id = 'free'` をデフォルト値として使用します。
+
+---
+
+## 再インストール後のサブスクリプション復元
+
+アプリを再インストールすると Cognito の identityId と sub が新規発行され、DB の `users` レコードとの紐づけが失われます。この場合 `GET /user/plan` は 404 を返します。
+
+### 復元フロー
+
+```mermaid
+flowchart TD
+    Start([アプリ起動]) --> GetPlan[GET /user/plan]
+    GetPlan -->|200 OK| Normal[通常フロー]
+    GetPlan -->|404 / null| Restore[再インストール復元フロー]
+
+    Restore --> RCRestore[silentRestorePurchases\nRC SDK で購入履歴を新 identityId に紐づけ]
+    RCRestore -->|Standard アクティブ| CallRestore[POST /user/plan/restore\nrc_app_user_id + plan_id: standard]
+    RCRestore -->|購入なし| ClearCache[キャッシュクリア\nplan_id: free のまま]
+
+    CallRestore --> UpsertDB[DB UPSERT\nusers テーブルに\n新 sub + identityId + plan_id を登録]
+    UpsertDB --> SetStandard[plan_id: standard\nローカルキャッシュ更新]
+```
+
+### `POST /user/plan/restore` の仕様
+
+| 項目 | 内容 |
+|---|---|
+| 認証 | Cognito JWT（新しい sub を取得） |
+| リクエスト | `rc_app_user_id`（新 identityId）+ `plan_id`（RC SDK で確認済み） |
+| DB操作 | `users` テーブルを `identity_id` をキーに UPSERT |
+| RC REST API | **呼ばない**（フロント側の RC SDK 検証結果を信頼） |
+
+```json
+// リクエスト
+{
+  "rc_app_user_id": "ap-northeast-1:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "plan_id": "standard"
+}
+
+// レスポンス
+{
+  "plan_id": "standard",
+  "restored": true
+}
+```
+
+### ローカルキャッシュ戦略
+
+起動時のプラン確認はバックエンド API のレスポンスを待たずに、先にローカルキャッシュ（`subscription_cache`）を読んで UI を即時反映します。
+
+| 状態 | 動作 |
+|---|---|
+| キャッシュあり・standard | 即座に有料UIを表示し、バックグラウンドでサーバー確認 |
+| キャッシュなし | free UI を表示し、バックエンド確認後に切り替え |
+| オフライン | キャッシュの値を維持（revert しない） |
 
 ---
 
@@ -138,4 +194,6 @@ Morincum-backend Lambda
 |---|---|
 | Morincum-backend #20 | RevenueCat Webhook受信エンドポイント |
 | Morincum-backend #135 | V012: identity_id カラム追加・購入前ユーザー対応 |
+| Morincum-backend #149 | 再インストール後のサブスク復元（POST /user/plan/restore） |
 | Morincum #221 | Cognito User Pool JWT 認証実装（cognitoAuth.ts） |
+| Morincum #267 | 再インストール復元・銘柄マスター同期・StartupScreen改善 |

@@ -120,6 +120,7 @@ Lambda（stock-price-batch）× 1本
 | dividend-batch | EventBridge | 256MB | 10分 |
 | fund-price-batch | EventBridge | 256MB | 10分 |
 | fx-rate-batch | EventBridge | 128MB | 3分 |
+| stock-master-sync | 手動（Lambda直接起動） | 512MB | 15分 |
 | news-generate-batch | EventBridge | 256MB | 5分 |
 | x-post-generate-batch | EventBridge | 256MB | 5分 |
 | slack-event-receiver | API Gateway | 128MB | 3秒 |
@@ -139,6 +140,7 @@ Lambda（stock-price-batch）× 1本
 | stock-price-batch | 平日 16:30 / 翌 6:30 | 株価OHLCV取得（yfinance） |
 | dividend-batch | 平日 17:00 | 配当情報取得（yfinance） |
 | fund-price-batch | 平日 19:00 | 投信基準価額取得（投資信託協会） |
+| stock-master-sync | 手動実行（随時） | 銘柄マスター全件同期（JPX + SEC EDGAR） |
 | news-generate-batch | 毎週月曜 8:00 | 統計→Claude API→ニュース生成 |
 | x-post-generate-batch | 毎日 9:00 | 統計→Claude API→X投稿文生成 |
 
@@ -242,7 +244,104 @@ Lambda（stock-price-batch）× 1本
 
 ---
 
-### 4.5 AIニュース生成バッチ（news-generate-batch）
+### 4.5 銘柄マスター同期バッチ（stock-master-sync）
+
+銘柄マスターテーブル（`securities_master`）をJPXおよびSEC EDGARの公式データで全件更新するバッチです。  
+フロントエンドの起動時差分同期（`GET /guest/stocks?updated_after=...`）のデータソースとなります。
+
+**データソース：**
+
+| 対象 | ソース | 利用形態 |
+|---|---|---|
+| 日本株 | JPX 上場銘柄一覧 Excel | 公式・無料（`data_j.xls`） |
+| 米国株 | SEC EDGAR company_tickers_exchange.json | 公式・無料 |
+
+**処理フロー：**
+
+```
+1. JPX Excel（data_j.xls）から日本株一覧を取得
+   - コード・銘柄名・市場区分・33業種コードを抽出
+   - 市場区分 → prime / standard / growth / etf / pro にマッピング
+
+2. SEC EDGAR JSON から米国株一覧を取得
+   - ticker / name_en / exchange（NYSE・NASDAQ）を抽出
+
+3. 米国株の日本語名翻訳（Claude API）
+   - DB で name_ja が NULL のティッカーのみ翻訳（差分翻訳）
+   - GET /internal/batch/stocks/untranslated?country=US で未翻訳リスト取得
+   - claude-haiku-4-5-20251001 で 200件バッチで翻訳
+
+4. 全データを JSON 整形し S3 に保存
+   stock_master/{ALL|JP|US}/{fetched_date}.json
+
+5. POST /internal/batch/stocks にS3キーを送信
+   バックエンドが S3 から JSON を取得して securities_master テーブルに UPSERT
+```
+
+**S3保存フォーマット：**
+
+```json
+{
+  "fetched_date": "2026-07-22",
+  "stocks": [
+    {
+      "ticker": "7203",
+      "name_ja": "トヨタ自動車",
+      "name_en": null,
+      "asset_type": "JP_STOCK",
+      "country": "JP",
+      "market": "prime",
+      "sector": "transportation_equipment",
+      "currency": "JPY"
+    },
+    {
+      "ticker": "AAPL",
+      "name_ja": "アップル",
+      "name_en": "Apple Inc.",
+      "asset_type": "US_STOCK",
+      "country": "US",
+      "market": "nasdaq",
+      "sector": null,
+      "currency": "USD"
+    }
+  ]
+}
+```
+
+**フロントエンドとの連携：**
+
+バッチ実行後、フロントエンドは起動時に差分同期を行います。
+
+```
+バッチ（stock-master-sync）
+    ↓ securities_master テーブルを更新
+バックエンド
+    ↓ GET /guest/stocks?updated_after=<last_synced_at>&limit=500&offset=N
+フロントエンド（syncSecuritiesMaster）
+    ├─ 新規インストール: updated_after なし → 全件取得（約10,000件・20ページ）
+    └─ 2回目以降: 差分のみ取得
+    ↓ await で完了まで待機（StartupScreen で件数表示）
+    完了後にホーム画面表示
+```
+
+**event パラメータ：**
+
+```json
+// 全市場（デフォルト）
+{}
+
+// 日本株のみ
+{ "market": "JP" }
+
+// 米国株のみ
+{ "market": "US" }
+```
+
+> ⚠️ JPX Excel は URL 変更リスクあり。SEC EDGAR は `User-Agent` ヘッダー必須（`Morincum contact@morincum.com`）。
+
+---
+
+### 4.6 AIニュース生成バッチ（news-generate-batch）
 
 - 実行タイミング: 毎週月曜 8:00 JST
 
@@ -258,7 +357,7 @@ Lambda（stock-price-batch）× 1本
 
 ---
 
-### 4.6 X投稿文生成バッチ（x-post-generate-batch）
+### 4.7 X投稿文生成バッチ（x-post-generate-batch）
 
 - 実行タイミング: 毎日 9:00 JST
 

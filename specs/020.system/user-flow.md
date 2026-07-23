@@ -140,18 +140,61 @@ flowchart TD
 
 ## 起動シーケンス（App.tsx）
 
-```typescript
-// 推奨実装順序
-1. initDatabase()           // SQLite初期化・マイグレーション
-2. loadSettings()           // app_settings読み込み
-3. getAllAccounts()          // 口座一覧読み込み
-4. fetchGuestToken()         // ★ Cognito匿名トークン発行（A案）
-5. fetchExchangeRate()       // GET /fx/latest（guestAuthで即利用可能）
-6. checkTutorial()           // hasSeenTutorial確認
-7. checkTerms()              // legal_agreements確認
-8. checkPin()                // SecureStore確認
-9. // ホーム表示
+起動時はスタートアップ画面（`StartupScreen`）を表示し、各ステップの進捗をプログレスバーとステータステキストでリアルタイム表示します。全ステップ完了後にホーム画面へ遷移します。
+
 ```
+ステップ一覧（表示ラベル）:
+  db      … DB・設定読み込み
+  auth    … ゲスト認証
+  rc      … RevenueCat初期化
+  cache   … ローカルキャッシュ確認
+  backend … プラン確認
+  rccheck … 購入状態照合
+  restore … 購入履歴復元
+  sync    … 銘柄マスター同期
+```
+
+```typescript
+// 実装順序（App.tsx useEffect）
+1. [db] ATTパーミッション取得（iOS のみ）
+        AdMob 初期化
+        initDatabase() / loadSettings() / getAllAccounts()
+        利用規約未同意チェック → TermsModal 表示
+        PIN 設定チェック → PinModal 表示
+
+2. [auth] clearIdentityIdIfNeeded()   // dev→prod 汚染防止
+          fetchGuestCredentials()      // Cognito Identity Pool 匿名トークン
+
+3.        checkAppVersion()            // バージョン確認（利用規約同意済み時のみ）
+
+4. [rc]   initializeRevenueCat(identityId)  // identityId = RC appUserID
+
+5. [cache] getSubscriptionCache()     // ローカルキャッシュ即時反映（オフライン対応）
+
+6. [backend / rccheck / restore]      // プラン確認（fire-and-forget）
+          fetchUserPlan()
+            ├─ 404/null → [再インストール復元フロー]
+            │     silentRestorePurchases(5000ms)
+            │     → RC で standard 確認 → POST /user/plan/restore
+            └─ 取得成功 → RC でダブルチェック（free の場合のみ）
+
+7.        fetchUsdJpy()               // 為替レート取得（バックグラウンド）
+
+8. [sync] syncSecuritiesMaster(credentials, onProgress)  // await で完了待機
+          ├─ 新規インストール → 全件取得（～10,000 件、20 ページ）
+          └─ 2回目以降    → updated_after による差分取得
+          ※ onProgress コールバックで「(500 / 10,000件)」をリアルタイム表示
+
+→ setDbReady(true) → ホーム画面表示
+```
+
+**重要な設計判断：**
+
+| 項目 | 設計 | 理由 |
+|---|---|---|
+| 銘柄マスター同期 | `await`（完了まで待機） | fire-and-forget だと初回起動で同期されず、手動同期で1万件が必要になるため |
+| プラン確認 | fire-and-forget | ホーム表示をブロックしたくない。ローカルキャッシュで先に反映 |
+| RevenueCat appUserID | Cognito Identity Pool identityId | 購入前はUser Poolアカウントが存在しないため |
 
 ---
 
@@ -162,6 +205,7 @@ flowchart TD
 | バックエンド #3 | Cognito認証基盤（guestAuth・cognitoAuth） |
 | バックエンド #20 | RevenueCat Webhook受信エンドポイント |
 | バックエンド #21 | アンケートのguestAuth対応 |
+| バックエンド #149 | 再インストール後のサブスク復元（POST /user/plan/restore） |
 
 ---
 
@@ -171,4 +215,6 @@ flowchart TD
 |---|---|
 | `src/db/database.ts` | SQLite初期化・マイグレーション |
 | `src/utils/exchangeRate.ts` | 為替レート取得（GET /fx/latest） |
-| `docs/03_architecture/031_architecture_guidelines.md` | アーキテクチャガイドライン |
+| `src/utils/securitiesMasterSync.ts` | 銘柄マスター差分同期 |
+| `src/utils/userPlan.ts` | プラン取得・復元（fetchUserPlan / restoreUserPlan） |
+| `src/components/StartupScreen.tsx` | 起動プログレス画面 |

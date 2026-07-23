@@ -449,6 +449,72 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /user/plan/restore:
+    post:
+      tags: [users]
+      summary: 再インストール後のサブスク復元
+      description: |
+        アプリ再インストール後に Cognito identityId と sub が新規発行され、
+        DBの users レコードとの紐づけが失われた場合に呼び出します。
+
+        ## 処理内容
+        1. フロントエンドが RevenueCat SDK (`silentRestorePurchases`) でサブスク状態を確認
+        2. Standard アクティブなら本エンドポイントを呼び出す
+        3. バックエンドは `users` テーブルを `identity_id` をキーに UPSERT
+           - 新しい Cognito sub と identity_id を登録
+           - plan_id を更新
+
+        ## 注意
+        - RC REST API での再確認は行わない（フロント側の RC SDK 検証を信頼）
+        - `identity_id` が既存レコードに存在する場合は `id`（sub）と `plan_id` を上書き
+      security:
+        - cognitoAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rc_app_user_id, plan_id]
+              properties:
+                rc_app_user_id:
+                  type: string
+                  description: RevenueCat appUserID（= Cognito Identity Pool identityId）
+                  example: 'ap-northeast-1:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+                plan_id:
+                  type: string
+                  description: RC SDK で確認したプランID
+                  enum: [free, standard]
+                  example: standard
+      responses:
+        '200':
+          description: 復元成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plan_id:
+                    type: string
+                    enum: [free, standard]
+                    example: standard
+                  restored:
+                    type: boolean
+                    description: standard プランとして復元されたか
+                    example: true
+        '400':
+          description: リクエストボディ不正
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Missing rc_app_user_id or plan_id'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   # ==========================================
   # サブスクリプション（RevenueCat Webhook）
   # ==========================================
