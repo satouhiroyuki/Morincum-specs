@@ -4,6 +4,10 @@ Morincumプロジェクト全体の仕様書・ドキュメントを一元管理
 
 ## プロジェクト概要
 
+このリポジトリは Morincum ブランドファミリー**複数プロダクト**の仕様書を一元管理する。プロダクトごとに `specs/` 配下のディレクトリを分けている（[`specs/README.md`](specs/README.md) 参照）。
+
+### 配当の森（Morincum） — フロント/バックエンド/バッチの複数リポジトリ構成
+
 | リポジトリ | 役割 | 技術スタック |
 |---|---|---|
 | **Morincum** | フロントエンド（iOS/Androidアプリ） | React Native + Expo + TypeScript |
@@ -11,22 +15,36 @@ Morincumプロジェクト全体の仕様書・ドキュメントを一元管理
 | **Morincum-batch** | 定期バッチ処理 | Python + AWS Lambda + EventBridge Scheduler |
 | **Morincum-specs** | 仕様書管理（このリポジトリ） | Markdown + YAML |
 
+### 家計の森（kakeinomori） — 単一リポジトリ・完全オンデバイス
+
+| リポジトリ | 役割 | 技術スタック |
+|---|---|---|
+| **kakei_no_mori-frontend** | フロントエンド（iOS/Androidアプリ、バックエンド不要） | React Native + Expo + TypeScript |
+
+> 家計の森は配当の森と異なり、フロント/バックエンド/バッチをまたぐ親子Issue運用は**行わない**。Issue管理は `kakei_no_mori-frontend` リポジトリ内で完結させる。仕様書のみ本リポジトリ（`specs/kakeinomori/`）に集約する。
+
 ## 仕様書構成
 
 ```
 specs/
-├── 010.product/     # プロダクト仕様（ブランド・ロードマップ・マニュアル）
-├── 020.system/      # システム設計（アーキテクチャ・認証・フロー）
-├── 030.database/    # データベース設計（フロント・バックエンド）
-├── 040.api/         # API仕様書（OpenAPI・テストガイド）
-├── 050.batch/       # バッチ処理仕様
-├── 060.infra/       # インフラ・CI/CD
-└── 100.legal/       # 法的文書（プライバシーポリシー）
+├── 010.product/     # 配当の森: プロダクト仕様（ブランド・ロードマップ・マニュアル）
+├── 020.system/      # 配当の森: システム設計（アーキテクチャ・認証・フロー）
+├── 030.database/    # 配当の森: データベース設計（フロント・バックエンド）
+├── 040.api/         # 配当の森: API仕様書（OpenAPI・テストガイド）
+├── 050.batch/       # 配当の森: バッチ処理仕様
+├── 060.infra/       # 配当の森: インフラ・CI/CD
+├── 100.legal/       # 配当の森: 法的文書（プライバシーポリシー）
+└── kakeinomori/      # 家計の森: プロダクト仕様一式（010.product / 020.system / 030.database）
 ```
 
 索引は [`specs/README.md`](specs/README.md) を参照してください。
 
+`010.product/`〜`100.legal/` は歴史的経緯で配当の森専用としてディレクトリ名にプロダクト名の接頭辞がない。今後さらにプロダクトを追加する場合は `specs/<product-slug>/` の形で切ること（家計の森=`specs/kakeinomori/` が最初の例）。
+
 ## ブランチ運用ルール
+
+> 本節は**配当の森**（Morincum / Morincum-backend / Morincum-batch / Morincum-specs の複数リポジトリ運用）向け。
+> **家計の森**は `kakei_no_mori-frontend` リポジトリ単独でIssue・ブランチ・PRを管理し、本節の親子Issueフローは適用しない。
 
 ### ブランチ命名規則
 
