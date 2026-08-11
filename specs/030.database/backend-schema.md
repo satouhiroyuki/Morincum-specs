@@ -236,6 +236,45 @@ erDiagram
 | posted_at | TIMESTAMP | X投稿日時 |
 | x_post_id | VARCHAR | XのポストID（Phase 2で使用） |
 
+### stocks（Phase 2・銘柄マスタ）
+
+`Morincum-batch` の `stock_master` バッチ（JPX上場銘柄一覧・SEC EDGAR）が同期する銘柄マスタ。
+
+| カラム | 型 | NULL | 説明 |
+|---|---|---|---|
+| id | UUID | NOT NULL | PK |
+| ticker | VARCHAR(20) | NOT NULL, UNIQUE | 証券コード（日本株）/ ティッカー（米国株） |
+| name_ja | VARCHAR(255) | nullable | 銘柄名（日本語）。米国株は翻訳バッチが埋めるまでnullの場合あり |
+| name_en | VARCHAR(255) | nullable | 銘柄名（英語） |
+| asset_type | VARCHAR(50) | NOT NULL | 資産種別（例: `US_STOCK`） |
+| country | VARCHAR(10) | NOT NULL | `JP` / `US` |
+| market | VARCHAR(50) | nullable | 市場区分。**JP: `prime`/`standard`/`growth`/`etf`/`pro`（小文字）、US: `nyse`/`nasdaq`（小文字）** |
+| sector | VARCHAR(100) | nullable | 業種分類。JPはTOPIX33業種、USはGICS風12分類（下記参照）。分類未済の銘柄はnull |
+| currency | VARCHAR(10) | NOT NULL | `JPY` / `USD`（デフォルト `JPY`） |
+| nisa_growth_start | DATE | nullable | NISA成長投資枠の対象開始日 |
+| nisa_tsumitate | BOOLEAN | NOT NULL | つみたて投資枠対象フラグ（デフォルト false） |
+| updated_at | TIMESTAMP WITH TIME ZONE | NOT NULL | 最終更新日時 |
+
+> ⚠️ **`market`は完全一致（大文字小文字を区別）でフィルタされる**（`GET /guest/stocks?market=...`）。書き込み・問い合わせのどちらも必ず小文字で統一すること。過去に米国株側だけ大文字（`NYSE`/`NASDAQ`）で問い合わせており、常に0件になるバグがあった（[Morincum-specs#48](https://github.com/satouhiroyuki/Morincum-specs/issues/48) で修正）。
+
+**`sector`の実際の値（2026-08-11時点、dev環境で確認）:**
+
+| 市場 | 値の例 |
+|---|---|
+| US（GICS風12分類） | `communication_services` / `consumer_discretionary` / `consumer_staples` / `energy` / `financials` / `healthcare` / `industrials` / `materials` / `other` / `real_estate` / `technology` / `utilities` |
+| JP（TOPIX33業種） | `stock_master/handler.py` の `_JPX_SECTOR_MAP` 参照（例: `banks`, `pharmaceutical`, `electric_power_gas` など） |
+
+### sectors（Phase 2・セクターマスタ）
+
+セクターの多言語ラベル定義（`market` + `sector_en` の組でユニーク）。
+
+| カラム | 型 | NULL | 説明 |
+|---|---|---|---|
+| id | UUID | NOT NULL | PK |
+| market | VARCHAR(10) | NOT NULL | `JP` / `US` |
+| sector_en | VARCHAR(100) | NOT NULL | セクターキー（英語・スネークケース） |
+| sector_ja | VARCHAR(100) | NOT NULL | セクター名（日本語表示用） |
+
 ---
 
 ## マイグレーション履歴（抜粋）
