@@ -507,6 +507,17 @@ text: #E8F5E9 → #2D4A2D
 
 ステップ構成はアプリごとの起動処理内容に合わせて定義する（家計の森などバックエンドを持たないアプリでは `auth`/`backend`/`rccheck` 等は不要）。
 
+**サブスクリプション有効期限の確認・失効時の処理（`cache`/`backend`/`rccheck`/`restore`ステップ）:**
+
+課金機能を持つアプリ（配当の森）では、起動時にサブスクリプションの有効期限切れを以下の流れで判定・処理する。
+
+1. **`cache`ステップ（即時反映）**: ローカルDBにキャッシュした `plan_id` / `expires_at` を読む。`expires_at` が現在時刻を過ぎていれば期限切れとみなしキャッシュを無効（`null`）として扱う。有効なキャッシュがあればオフラインでも即座に `standard` プランをUIへ反映する。
+2. **`backend`ステップ（正式確認・バックグラウンド）**: バックエンドAPIから正式なプラン情報を取得する。
+3. **`rccheck`ステップ（ダブルチェック）**: バックエンドが `free`（＝サブスク切れの可能性）を返した場合、RevenueCatへ直接問い合わせて実際のentitlement状態を確認する。
+4. **`restore`ステップ（救済）**: RevenueCat側でも非アクティブだった場合、購入履歴の再同期（silent restore）を試みる。機種変更・再インストール・identity_id変更などでキャッシュが失われたケースを救済するため。
+5. **確定処理**: 上記すべてでアクティブなentitlementが見つからなければ「確定free」とし、ローカルキャッシュを削除。初回のダウングレードのみ、ダウングレード通知を表示した上で口座を1つ目に強制切り替え・テーマをgreenにリセットする。
+6. **オフライン時の安全策**: RevenueCatに接続できない場合は、誤ってダウングレードしないようローカルキャッシュの状態を維持したまま続行する（次回オンライン時に再判定）。
+
 **実装上の注意（Android）:** サブタイトルのような `alignItems: 'center'` 配下の自動幅（shrink-to-fit）Textは、Android特有の幅測定不具合で2文字目以降が描画されないことがある（[Morincum#48](https://github.com/satouhiroyuki/Morincum/pull/272)で確認）。該当Textには明示的に `width` と `textAlign: 'center'` を指定して回避すること。
 
 参考実装: `Morincum/src/components/StartupScreen.tsx`
