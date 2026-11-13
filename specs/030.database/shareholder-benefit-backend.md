@@ -63,10 +63,14 @@ JPX上場株式の株主優待を、一次情報(EDINET有報、後続で自社I
 | value_kind | VARCHAR(30) | 優待の種類: `meal_voucher` / `shopping_voucher` / `discount` / `own_product` / `own_service` / `points` / `transport` / `cash_equivalent`(QUOカード等)/ `catalog` / `donation` / `other` |
 | value_basis | VARCHAR(20) | `face`(額面が明記)/ `estimate`(推定。時価など)/ `unknown`(金額化しない) |
 | value_note | TEXT | 金額化の根拠・補足(例: 「入浴券。時価で推定」) |
+| holding_months | INT NULL | その区分に必要な継続保有期間(月)。NULL = 期間の条件なし |
+| consecutive_count | INT NULL | その区分に必要な基準日の連続回数。NULL = 回数の条件なし |
 
+- **決定(保有期間で内容が変わる優待): 区分に保有期間・連続回数を持たせる。** 「100株×保有3年未満=2,000円」「100株×保有3年以上=4,000円」のように、株数と保有期間の組み合わせごとに1行にする(区分の識別は `min_shares` + `holding_months` + `consecutive_count`。同じ優待の中で重複しない)。アプリは、株数と保有期間から、該当する区分を引ける。基準日ごとの継続判定(連続回数)の条件が、ある区分だけに掛かる場合も、区分の列で表す。`stock_benefit_conditions` は、区分に分けられない条件(優待全体にかかる条件、追加優待の説明など)に使う。なお、「期間が長いと、内容が置き換わる」場合は区分に、「基本優待に、別の優待が加わる」場合は `conditions` の `applies_to=additional` に入れる。(Morincum-backend V015)
 - `estimated_value`(既存)は、`value_basis` が `face` または `estimate` のときだけ値を入れる。`unknown` は NULL。
 - 画面では、`estimate` に「推定」を付ける。`unknown` は金額を出さず、`description` を表示する。
 - バッチは、推定金額を作らない(当面は空白)。`estimated_value` は、原文に額面が明記されている場合(例: 「食事券2,000円分」)だけ入れ、`value_basis='face'` とする。それ以外は NULL、`value_basis='unknown'`。`estimate` は、将来、推定値を作る場合のために、定義だけ残す。
+- **決定(案1: 現状のまま):** 円で表せない優待(割引率、ポイント、範囲のある金額など)は、`value_basis='unknown'` とし、説明文(`description`)で表示する。金額は、利用者の手入力(6.1)で補う。割引率(`discount_rate`)や金額の単位(`value_unit`)の列は、当面、追加しない。構造化の結果を見て、必要なら、後から追加する(列の追加のみで、既存のデータに影響しない)。
 - 既存データの移行: `estimated_value` がある行は `value_basis='face'`(要確認: 既存データの実態を調べてから決める)、ない行は `unknown`。
 
 ### 3.4 新規: `stock_benefit_conditions`(継続保有条件)

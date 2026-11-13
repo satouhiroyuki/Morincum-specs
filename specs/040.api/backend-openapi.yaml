@@ -29,7 +29,7 @@ info:
 
     ## エラーレスポンス
     全エンドポイント共通のエラー形式を返します。
-  version: 1.12.0
+  version: 1.13.0
   contact:
     name: Morincum開発チーム
 
@@ -3092,6 +3092,15 @@ components:
           type: integer
           description: 必要最低株数
           example: 100
+        holding_months:
+          type: integer
+          nullable: true
+          description: その区分に必要な継続保有期間（月）。null は期間の条件なし
+          example: 36
+        consecutive_count:
+          type: integer
+          nullable: true
+          description: その区分に必要な基準日の連続回数。null は回数の条件なし
         benefit_type:
           type: string
           example: 食品
@@ -3143,6 +3152,14 @@ components:
           type: integer
           nullable: true
           description: 特定の区分だけに適用する場合の、その区分の最低株数
+        tier_holding_months:
+          type: integer
+          nullable: true
+          description: 対象の区分の保有期間（月）。同じ株数の区分が複数あるときに、区分を特定する
+        tier_consecutive_count:
+          type: integer
+          nullable: true
+          description: 対象の区分の連続回数
         raw_text:
           type: string
           description: 原文
@@ -3208,6 +3225,8 @@ components:
                   required: [min_shares]
                   properties:
                     min_shares: { type: integer }
+                    holding_months: { type: integer, minimum: 1, description: 保有期間（月）。同じ優待内で (min_shares, holding_months, consecutive_count) は重複不可 }
+                    consecutive_count: { type: integer, minimum: 1 }
                     benefit_type: { type: string }
                     value_kind: { type: string }
                     value_basis: { type: string, enum: [face, estimate, unknown] }
@@ -3224,6 +3243,8 @@ components:
                   required: [condition_type, raw_text]
                   properties:
                     tier_min_shares: { type: integer }
+                    tier_holding_months: { type: integer }
+                    tier_consecutive_count: { type: integer }
                     condition_type: { type: string, enum: [consecutive_record_dates, holding_period, other] }
                     required_count: { type: integer }
                     required_months: { type: integer }
