@@ -29,7 +29,7 @@ info:
 
     ## エラーレスポンス
     全エンドポイント共通のエラー形式を返します。
-  version: 1.13.0
+  version: 1.14.0
   contact:
     name: Morincum開発チーム
 
@@ -3101,6 +3101,10 @@ components:
           type: integer
           nullable: true
           description: その区分に必要な基準日の連続回数。null は回数の条件なし
+        grant_count:
+          type: integer
+          nullable: true
+          description: その区分の優待を贈る回数（贈呈回数）。1 は1回限り。null は基準日ごとに毎回
         benefit_type:
           type: string
           example: 食品
@@ -3227,6 +3231,7 @@ components:
                     min_shares: { type: integer }
                     holding_months: { type: integer, minimum: 1, description: 保有期間（月）。同じ優待内で (min_shares, holding_months, consecutive_count) は重複不可 }
                     consecutive_count: { type: integer, minimum: 1 }
+                    grant_count: { type: integer, minimum: 1, description: 贈呈回数（1=1回限り、省略=毎回）。(min_shares, holding_months, consecutive_count, grant_count) は同じ優待内で重複不可 }
                     benefit_type: { type: string }
                     value_kind: { type: string }
                     value_basis: { type: string, enum: [face, estimate, unknown] }

@@ -65,7 +65,9 @@ JPX上場株式の株主優待を、一次情報(EDINET有報、後続で自社I
 | value_note | TEXT | 金額化の根拠・補足(例: 「入浴券。時価で推定」) |
 | holding_months | INT NULL | その区分に必要な継続保有期間(月)。NULL = 期間の条件なし |
 | consecutive_count | INT NULL | その区分に必要な基準日の連続回数。NULL = 回数の条件なし |
+| grant_count | INT NULL | その区分の優待を贈る回数(贈呈回数)。1 = 1回限り。NULL = 基準日ごとに毎回 |
 
+- **決定(優待の1行の持ち方): 月・株数・保有期間・金額・備考・回数。** 月=`record_month`、株数=`min_shares`、保有期間=`holding_months`(連続回数は `consecutive_count`)、金額=`estimated_value`、備考=`description`(品物・割引券などの内容)、回数=`grant_count`(1回限りなど)。長期保有などの追加優待も、保有期間つきの行にし、金額は「その条件でもらえる合計」(基本+追加)にする。**年間の金額は、アプリが、月ごとに、利用者の株数・保有期間に合う行を1つ選び、その合計で出す**(データには持たない)。`conditions` は、行では表せない条件(預金残高など)だけに使う。
 - **決定(保有期間で内容が変わる優待): 区分に保有期間・連続回数を持たせる。** 「100株×保有3年未満=2,000円」「100株×保有3年以上=4,000円」のように、株数と保有期間の組み合わせごとに1行にする(区分の識別は `min_shares` + `holding_months` + `consecutive_count`。同じ優待の中で重複しない)。アプリは、株数と保有期間から、該当する区分を引ける。基準日ごとの継続判定(連続回数)の条件が、ある区分だけに掛かる場合も、区分の列で表す。`stock_benefit_conditions` は、区分に分けられない条件(優待全体にかかる条件、追加優待の説明など)に使う。なお、「期間が長いと、内容が置き換わる」場合は区分に、「基本優待に、別の優待が加わる」場合は `conditions` の `applies_to=additional` に入れる。(Morincum-backend V015)
 - `estimated_value`(既存)は、`value_basis` が `face` または `estimate` のときだけ値を入れる。`unknown` は NULL。
 - 画面では、`estimate` に「推定」を付ける。`unknown` は金額を出さず、`description` を表示する。
