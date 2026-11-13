@@ -29,7 +29,7 @@ info:
 
     ## エラーレスポンス
     全エンドポイント共通のエラー形式を返します。
-  version: 1.11.1
+  version: 1.12.0
   contact:
     name: Morincum開発チーム
 
@@ -922,6 +922,50 @@ paths:
   # 銘柄マスタ
   # ==========================================
 
+  /guest/benefits:
+    get:
+      tags: [stocks]
+      summary: 株主優待の差分同期
+      description: |
+        `stock_benefit_sources.updated_at` が `updated_after` より新しい銘柄の優待を、ページングで返します。
+        優待が「なし」に変わった銘柄も、`benefit_status` と空の `benefits` で返します（クライアントが古い優待を削除するため）。
+      security:
+        - cognitoAuth: []
+        - guestAuth: []
+      parameters:
+        - name: updated_after
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: この日時より後に更新された銘柄のみ返す（ISO8601）
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - $ref: '#/components/parameters/locale'
+      responses:
+        '200':
+          description: 優待の差分
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockBenefitSyncItem'
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /guest/stocks:
     get:
       tags: [stocks]
@@ -1085,6 +1129,22 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/StockBenefit'
+                  benefit_status:
+                    type: string
+                    enum: [exists, none, unconfirmed, no_filing, needs_review]
+                    description: 確認状況。まだ確認していない銘柄は unconfirmed
+                  checked_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  source:
+                    allOf:
+                      - $ref: '#/components/schemas/BenefitSource'
+                    nullable: true
+                  updated_at:
+                    type: string
+                    format: date-time
+                    nullable: true
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -1567,6 +1627,87 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '500':
           $ref: '#/components/responses/InternalServerError'
+
+  /internal/batch/benefits/targets:
+    get:
+      tags: [internal]
+      summary: 優待の確認対象銘柄の取得
+      description: 確認期限が来た銘柄、人の確認が必要な銘柄、未確認の銘柄を返します。
+      security:
+        - iamAuth: []
+      parameters:
+        - name: reason
+          in: query
+          schema: { type: string, enum: [due, needs_review, never_checked], default: due }
+        - name: country
+          in: query
+          schema: { type: string, default: JP }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: 確認対象
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reason: { type: string }
+                  count: { type: integer }
+                  targets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        stock_id: { type: string, format: uuid }
+                        ticker: { type: string }
+                        benefit_status: { type: string, nullable: true }
+                        verify_status: { type: string, nullable: true }
+                        last_checked_at: { type: string, format: date-time, nullable: true }
+                        next_check_at: { type: string, format: date-time, nullable: true }
+                        source_doc_id: { type: string, nullable: true }
+                        source_filed_at: { type: string, format: date, nullable: true }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /internal/batch/benefits:
+    post:
+      tags: [internal]
+      summary: 株主優待の登録（1銘柄分）
+      description: |
+        1銘柄分の優待を、1トランザクションで反映します（冪等）。
+        順序: 確認状況を更新 → 新しい優待行を追加 → 古い優待行を `stock_benefit_revisions` に保存 → 古い優待行を削除。
+        同じ `source.doc_id`・同じ `benefit_status` の再送は、確認日・次回確認日・検証結果のみ更新します（`changed: false`）。
+        `benefit_status` が `exists` 以外の場合、`benefits` は空にしてください。
+      security:
+        - iamAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterBenefitsRequest'
+      responses:
+        '200':
+          description: 反映結果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticker: { type: string }
+                  changed: { type: boolean }
+                  benefits_inserted: { type: integer }
+                  benefits_replaced: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /internal/batch/dividends:
     post:
@@ -2921,8 +3062,15 @@ components:
         record_date:
           type: string
           format: date
-          description: 権利確定日
+          nullable: true
+          description: 権利確定日（確定していない場合は null。その場合は record_month を使う）
           example: '2026-03-31'
+        record_month:
+          type: integer
+          minimum: 1
+          maximum: 12
+          nullable: true
+          description: 権利確定月
         fiscal_period:
           type: string
           example: 2025Q4
@@ -2931,6 +3079,11 @@ components:
           description: 株数別の優待内容
           items:
             $ref: '#/components/schemas/BenefitTier'
+        conditions:
+          type: array
+          description: 継続保有条件
+          items:
+            $ref: '#/components/schemas/BenefitCondition'
 
     BenefitTier:
       type: object
@@ -2944,12 +3097,139 @@ components:
           example: 食品
         estimated_value:
           type: number
-          description: 推定金額（円）
+          nullable: true
+          description: 金額（円）。value_basis が face または estimate のときのみ。
           example: 3000
+        value_kind:
+          type: string
+          nullable: true
+          description: 優待の種類（meal_voucher / shopping_voucher / discount / own_product / own_service / points / transport / cash_equivalent / catalog / donation / other）
+        value_basis:
+          type: string
+          nullable: true
+          enum: [face, estimate, unknown]
+          description: 金額の根拠。face=額面が明記、estimate=推定、unknown=金額化しない
+        value_note:
+          type: string
+          nullable: true
         description:
           type: string
           description: 優待内容の説明
           example: カタログギフト（3,000円相当）
+
+    BenefitCondition:
+      type: object
+      properties:
+        condition_type:
+          type: string
+          enum: [consecutive_record_dates, holding_period, other]
+        required_count:
+          type: integer
+          nullable: true
+          description: 基準日の連続回数
+        required_months:
+          type: integer
+          nullable: true
+          description: 保有期間（月数）
+        min_shares:
+          type: integer
+          nullable: true
+          description: 条件の対象となる必要株数
+        applies_to:
+          type: string
+          nullable: true
+          enum: [base, additional]
+        tier_min_shares:
+          type: integer
+          nullable: true
+          description: 特定の区分だけに適用する場合の、その区分の最低株数
+        raw_text:
+          type: string
+          description: 原文
+
+    BenefitSource:
+      type: object
+      properties:
+        type: { type: string, nullable: true, enum: [edinet, ir, tdnet, manual] }
+        doc_id: { type: string, nullable: true }
+        filed_at: { type: string, format: date, nullable: true }
+        url: { type: string, nullable: true }
+
+    StockBenefitSyncItem:
+      type: object
+      properties:
+        ticker: { type: string }
+        benefit_status:
+          type: string
+          enum: [exists, none, unconfirmed, no_filing, needs_review]
+        checked_at: { type: string, format: date-time, nullable: true }
+        source:
+          $ref: '#/components/schemas/BenefitSource'
+        updated_at: { type: string, format: date-time }
+        benefits:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockBenefit'
+
+    RegisterBenefitsRequest:
+      type: object
+      required: [ticker, benefit_status]
+      properties:
+        ticker: { type: string, example: '9993' }
+        benefit_status:
+          type: string
+          enum: [exists, none, unconfirmed, no_filing, needs_review]
+        source:
+          type: object
+          properties:
+            type: { type: string, enum: [edinet, ir, tdnet, manual] }
+            doc_id: { type: string, description: 'benefits を渡す場合は必須' }
+            filed_at: { type: string, format: date }
+            url: { type: string }
+            s3_key: { type: string }
+        verify_status:
+          type: string
+          enum: [ok, needs_review, needs_fix, unverified]
+        extractor_version: { type: string }
+        structured_json: { type: object }
+        next_check_at: { type: string, format: date-time }
+        benefits:
+          type: array
+          items:
+            type: object
+            properties:
+              record_date: { type: string, format: date }
+              record_month: { type: integer, minimum: 1, maximum: 12 }
+              fiscal_period: { type: string }
+              tiers:
+                type: array
+                items:
+                  type: object
+                  required: [min_shares]
+                  properties:
+                    min_shares: { type: integer }
+                    benefit_type: { type: string }
+                    value_kind: { type: string }
+                    value_basis: { type: string, enum: [face, estimate, unknown] }
+                    estimated_value: { type: number }
+                    value_note: { type: string }
+                    descriptions:
+                      type: object
+                      additionalProperties: { type: string }
+                      example: { ja: 食事券2,000円分 }
+              conditions:
+                type: array
+                items:
+                  type: object
+                  required: [condition_type, raw_text]
+                  properties:
+                    tier_min_shares: { type: integer }
+                    condition_type: { type: string, enum: [consecutive_record_dates, holding_period, other] }
+                    required_count: { type: integer }
+                    required_months: { type: integer }
+                    min_shares: { type: integer }
+                    applies_to: { type: string, enum: [base, additional] }
+                    raw_text: { type: string }
 
     StockPrice:
       type: object
