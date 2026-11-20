@@ -4,8 +4,18 @@ Morincumブランドファミリー全体の仕様書一覧です。プロダク
 
 | プロダクト | ディレクトリ | 内容 |
 |---|---|---|
+| ファミリー共通 | [`family/`](family/) | 複数のアプリにまたがる仕様（統合ダッシュボード・端末内のアプリ間連携） |
 | 配当の森（Morincum） | [`.`](.)（直下の `010.product`〜`100.legal`） | 配当・NISA管理アプリ。フロント/バックエンド/バッチの複数リポジトリ構成 |
 | 家計の森（kakeinomori） | [`kakeinomori/`](kakeinomori/) | クレカ明細のタグ×予算仕分けアプリ。`kakei_no_mori-frontend` 単一リポジトリ・完全オンデバイス |
+
+---
+
+## ファミリー共通（family）
+
+| ファイル | 説明 |
+|---|---|
+| [dashboard-plan.md](family/dashboard-plan.md) | 統合ダッシュボード（仮称）の企画。端末内だけで連携し、市場の情報はバックエンドから取る |
+| [app-link.md](family/app-link.md) | アプリ間連携の取り決め（iOS App Groups / Android ContentProvider・要約 JSON の形・書き出すタイミング） |
 
 ---
 
