@@ -18,6 +18,8 @@ Morincumブランドファミリー全体の仕様書一覧です。プロダク
 |---|---|
 | [brand.md](010.product/brand.md) | デザインガイドライン（カラーパレット・タイポグラフィ・コンポーネント） |
 | [roadmap.md](010.product/roadmap.md) | ロードマップ・Issue一覧（Phase 1/2） |
+| [ideas.md](010.product/ideas.md) | アイディア一覧（版に縛られない機能の案。ID の正） |
+| [releases/](010.product/releases/README.md) | リリース計画とコードネーム（3.0.0 "Tadasu" など） |
 | [user-manual.md](010.product/user-manual.md) | 操作マニュアル・ヘルプ |
 
 ### 020. システム
@@ -28,6 +30,7 @@ Morincumブランドファミリー全体の仕様書一覧です。プロダク
 | [billing-flow.md](020.system/billing-flow.md) | サブスク購入フロー（RevenueCat・iOS/Android） |
 | [security.md](020.system/security.md) | セキュリティ設計（Cognito認証・AWS WAF・ローカルセキュリティ） |
 | [user-flow.md](020.system/user-flow.md) | ユーザーフロー設計（認証状態・画面遷移） |
+| [onboarding-spec.md](020.system/onboarding-spec.md) | 初期導入（オンボーディング）仕様（3.0.0 Tadasu） |
 
 ### 030. データベース
 
@@ -121,5 +124,6 @@ Morincumブランドファミリー全体の仕様書一覧です。プロダク
 
 | ファイル | 説明 |
 |---|---|
-| [fudosan-mock-v0.1.jsx](fudosannomori/design/mock/fudosan-mock-v0.1.jsx) | 画面モック v0.1（UIの正） |
+| [fudosan-mock-v0.2.jsx](fudosannomori/design/mock/fudosan-mock-v0.2.jsx) | 画面モック v0.2（UIの正）。S-07 登録ウィザード・S-10〜S-18 を追加し、すべてのボタンが動く |
+| [fudosan-mock-v0.1.jsx](fudosannomori/design/mock/fudosan-mock-v0.1.jsx) | 画面モック v0.1 |
 | [fudosan-mori-spec-v0.2.html](fudosannomori/design/fudosan-mori-spec-v0.2.html) | 仕様書 v0.2.4 の Mermaid 描画版（登録時点の原本） |

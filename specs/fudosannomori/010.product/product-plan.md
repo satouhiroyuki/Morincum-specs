@@ -1,7 +1,7 @@
 # 不動産の森 by Morincum — プロダクト仕様
 
 > ソース: 仕様書 `fudosan-mori-spec-v0.1.md`（v0.2.4、Mermaid描画版 `fudosan-mori-spec-v0.2.html`）を章ごとに分けて Markdown にしたもの
-> UIの正: [`design/mock/fudosan-mock-v0.1.jsx`](../design/mock/fudosan-mock-v0.1.jsx)
+> UIの正: [`design/mock/fudosan-mock-v0.2.jsx`](../design/mock/fudosan-mock-v0.2.jsx)(v0.1 も同じ場所に残している)
 > 状態: モック検証中（実装未着手）。判断の経緯は [handoff-2026-11-20.md](handoff-2026-11-20.md) を参照
 
 | 項目 | 内容 |
