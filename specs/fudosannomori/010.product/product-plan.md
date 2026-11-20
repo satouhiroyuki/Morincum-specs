@@ -11,7 +11,7 @@
 | 更新日 | 2026-11-20（specs に登録） |
 | アプリ名 | 不動産の森 by Morincum（Fudosan no Mori） |
 | 最初の版のコードネーム | `kiso`（木曽ヒノキの森）。[releases/README.md](releases/README.md) を参照 |
-| リポジトリ | `Morincum-fudosan`（仮・未作成） |
+| リポジトリ | [`Morincum-fudosan`](https://github.com/satouhiroyuki/Morincum-fudosan)（2026-11-20 作成・まだ空） |
 | バックエンド | 新しく作らない。配当の森の Cognito User Pool（App Client を追加）と課金検証APIを共用 |
 
 ---

@@ -93,7 +93,7 @@ Morincumブランドファミリー全体の仕様書一覧です。プロダク
 
 ## 不動産の森（fudosannomori）
 
-> 状態: モック検証中（実装未着手）。アプリのリポジトリは未作成（`Morincum-fudosan`、仮）
+> 状態: モック検証中（実装未着手）。アプリのリポジトリは [`Morincum-fudosan`](https://github.com/satouhiroyuki/Morincum-fudosan)（作成済み・まだ空）
 
 ### 010. プロダクト
 

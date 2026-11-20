@@ -27,7 +27,7 @@ Morincumプロジェクト全体の仕様書・ドキュメントを一元管理
 
 | リポジトリ | 役割 | 技術スタック |
 |---|---|---|
-| **Morincum-fudosan**（仮・未作成） | フロントエンド（iOS/Androidアプリ） | React Native + Expo + TypeScript（予定） |
+| **Morincum-fudosan**（作成済み・まだ空） | フロントエンド（iOS/Androidアプリ） | React Native + Expo + TypeScript（予定） |
 
 > データは端末内（SQLite）に持つ。認証（Cognito User Pool に App Client を追加）と課金検証APIだけ Morincum-backend を共用し、新しいAWSリソースは作らない。仕様書は `specs/fudosannomori/` に集約する。
 
