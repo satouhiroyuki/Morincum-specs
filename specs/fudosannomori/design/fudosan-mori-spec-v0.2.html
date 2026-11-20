@@ -1,0 +1,2319 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>不動産の森 by Morincum 仕様書 v0.2</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #F6F4F0; --surface: #fff; --border: #E6DFD4;
+    --text: #3A3229; --muted: #8C8072; --accent: #A8552F; --green: #4E9B58;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+    font-size: 14px; line-height: 1.8; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 80px; }
+  .sheet { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 40px 48px; }
+  h1 { font-size: 24px; border-bottom: 3px solid var(--green); padding-bottom: 10px; }
+  h2 { font-size: 19px; color: var(--accent); border-bottom: 1px solid var(--border);
+    padding-bottom: 6px; margin-top: 44px; }
+  h3 { font-size: 15px; margin-top: 28px; }
+  h3::before { content: "■ "; color: var(--green); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 12.5px; }
+  th { background: #EFE9DF; text-align: left; }
+  th, td { border: 1px solid var(--border); padding: 7px 10px; vertical-align: top; }
+  tr:nth-child(even) td { background: #FBFAF7; }
+  code { background: #F0EBE2; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+  pre { background: #2E2A24; color: #EDE7DC; border-radius: 10px; padding: 14px 18px;
+    overflow-x: auto; font-size: 12.5px; line-height: 1.6; }
+  pre code { background: none; color: inherit; padding: 0; }
+  blockquote { border-left: 4px solid var(--green); margin: 12px 0; padding: 4px 16px;
+    color: var(--muted); background: #F7F5F0; border-radius: 0 8px 8px 0; }
+  .mermaid { background: #FBFAF7; border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; margin: 16px 0; text-align: center; }
+  hr { border: none; border-top: 1px dashed var(--border); margin: 36px 0; }
+  strong { color: var(--accent); }
+  th strong, h1 strong, h2 strong { color: inherit; }
+  .toc { background: #FBFAF7; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 22px; font-size: 13px; }
+  .toc ul { margin: 4px 0; padding-left: 18px; }
+  .toc a { color: var(--text); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+  @media print {
+    body { background: #fff; }
+    .sheet { border: none; padding: 0; }
+    h2 { break-before: page; }
+    h1 + table + hr + h2, h2:first-of-type { break-before: avoid; }
+    .mermaid { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap"><div class="sheet">
+<h1 id="by-morincum">不動産の森 by Morincum 仕様書</h1>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文書名</td>
+<td>不動産の森 by Morincum 仕様書</td>
+</tr>
+<tr>
+<td>版数</td>
+<td>v0.2(契約管理の新設・入力面の3層化を反映)</td>
+</tr>
+<tr>
+<td>作成日</td>
+<td>2026-07-23</td>
+</tr>
+<tr>
+<td>関連成果物</td>
+<td>画面モック <code>fudosan-mock-v0.1.jsx</code></td>
+</tr>
+<tr>
+<td>ステータス</td>
+<td>モック検証中(実装未着手)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 企画書</h2>
+<h3 id="11">1.1 背景・目的</h3>
+<p>投資用不動産(区分マンション・戸建・一棟・駐車場等)を保有する個人オーナー向けの賃貸経営管理アプリ。企画の源泉は<strong>「毎月の合計でいくら入り、いくら出ていくかが見たい」</strong>という資金繰りニーズであり、資産評価額や含み益ではなく<strong>インカム(キャッシュフロー)の管理</strong>に特化する。</p>
+<p>オーナーの毎月の関心は「合計でいくら儲かったか」より先に「何日に、どの口座から、いくら引き落とされるか」にある。この<strong>口座軸の資金繰りビュー</strong>を独自の顔とする。</p>
+<h3 id="12-morincum">1.2 MORINCUMファミリーにおける位置づけ</h3>
+<p>MORINCUMは「1つ1つが明確な役割を持つ」特化型アプリ群(ファミリー)として展開する。全部入りの資産管理アプリとは戦わず、各領域で最も使いやすい単機能アプリを提供する。</p>
+<table>
+<thead>
+<tr>
+<th>プロダクト</th>
+<th>役割</th>
+<th>データの向き</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>配当の森(リリース済)</td>
+<td>株式・投信の配当インカム管理</td>
+<td>入力・蓄積</td>
+</tr>
+<tr>
+<td><strong>不動産の森(本仕様)</strong></td>
+<td>賃貸経営のインカム/コスト管理</td>
+<td>入力・蓄積</td>
+</tr>
+<tr>
+<td>家計簿アプリ(構想)</td>
+<td>カード明細CSVによる支出管理</td>
+<td>入力・蓄積</td>
+</tr>
+<tr>
+<td>統合ダッシュボード(構想)</td>
+<td>全アプリの月次サマリー閲覧</td>
+<td>閲覧専用</td>
+</tr>
+<tr>
+<td>FP向けWeb(構想)</td>
+<td>FPが許可された顧客の状況を閲覧</td>
+<td>閲覧専用</td>
+</tr>
+</tbody>
+</table>
+<p><strong>データモデルは各アプリ完全独立</strong>とする。ファミリー共通スキーマで各アプリを縛らない。将来の統合は、各アプリが「月次サマリー(年月・収入計・支出計)」を出力し、閲覧側で変換・集約する方式で足りる。</p>
+<h3 id="13">1.3 設計思想(ファミリー共通)</h3>
+<ol>
+<li><strong>ローカルファースト</strong>: ユーザーデータはすべて端末内(SQLite)に保存。サーバーに資産情報を預からない</li>
+<li><strong>サイレントアカウント</strong>: 認証(Cognito)は裏で自動発行し、ユーザーに「ログイン」を意識させない。個人情報(メール等)は取得しない</li>
+<li><strong>明示的な連携</strong>: ファミリー連携・クラウド同期(プレミア)を使うときだけ、ユーザーが自分の意思でMORINCUM IDを作成・紐付けする</li>
+<li><strong>予定と実績の分離</strong>: 銀行口座と接続しないため、アプリが示せるのは常に「登録内容にもとづく予定」。断定表現を避け、実際の確認は口座に委ねる</li>
+</ol>
+<h3 id="14">1.4 ターゲットユーザー</h3>
+<ul>
+<li>一般公開。区分1戸の初心者から複数物件・一棟・駐車場を持つ個人オーナーまで</li>
+<li>貸出単位(unit)ベースのフラットな構造+タグにより、管理単位をユーザーに押し付けない</li>
+<li>将来: FPと数字を共有しながら相談したいオーナー(プレミア)</li>
+</ul>
+<h3 id="15">1.5 提供価値と差別化</h3>
+<table>
+<thead>
+<tr>
+<th>競合状況</th>
+<th>本アプリの差別化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全部入り資産管理(マネーフォワード等)</td>
+<td>インカム特化・シンプル。データは端末内</td>
+</tr>
+<tr>
+<td>既存の不動産収支アプリ</td>
+<td><strong>口座別の引き落としビュー+前日通知</strong>(資金繰りの実務)</td>
+</tr>
+<tr>
+<td>表計算での自己管理</td>
+<td>イベント(トラブル・更新・総会)と収支の紐付け、通知、儀式化されたUX</td>
+</tr>
+</tbody>
+</table>
+<h3 id="16">1.6 プラン・収益モデル</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>フリー</th>
+<th>スタンダード</th>
+<th>プレミア(将来)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>価値の軸</td>
+<td>記録できる</td>
+<td>経営が見える</td>
+<td>つながる</td>
+</tr>
+<tr>
+<td>unit数</td>
+<td>5件</td>
+<td>無制限</td>
+<td>無制限</td>
+</tr>
+<tr>
+<td>収支記録・タグ・絞り込み</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>入出金ビュー(口座別/日付別・月別グラフ・年間トータル)</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>ローン返済額記録(simple)+引き落とし日</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>イベント管理(トラブル・更新・総会)</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>通知(引き落とし前日・契約満了・期日)</td>
+<td>○</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>ローン詳細分析(残債・利息内訳・手残り)</td>
+<td>—</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>タグ横断ダッシュボード・年間サマリー(申告向け)・CSV</td>
+<td>—</td>
+<td>○</td>
+<td>○</td>
+</tr>
+<tr>
+<td>広告(AdMob)</td>
+<td>あり</td>
+<td>なし</td>
+<td>なし</td>
+</tr>
+<tr>
+<td>クラウド同期・統合ダッシュボード・FP共有</td>
+<td>—</td>
+<td>—</td>
+<td>○</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>線引きの原則: <strong>「日々の記録と資金繰り=無料」「経営分析と横断=有料」「端末の外に出るもの=プレミア」</strong></li>
+<li>フリー→スタンダードの導線: 6件目のunit、ローン詳細分析、タグ横断ダッシュボード</li>
+<li>サーバーコスト: 本アプリは日次バッチ・マスタ配信が不要。サーバー側は課金検証(エンタイトルメントAPI、配当の森と共用)のみ。<strong>新設AWSリソースはゼロ</strong></li>
+</ul>
+<h3 id="17-v1">1.7 スコープ外(v1)</h3>
+<ul>
+<li>銀行API連携・残高取得(思想として恒久的に対象外)</li>
+<li>口座間振替の記録(v1.x候補。cashflow direction に transfer 追加で拡張可)</li>
+<li>複数unitにまたがる経費の按分入力支援(v1.xで検討。ローンのみv1で按分対応)</li>
+<li>消費税計算(unit_typeの区分のみ保持)</li>
+<li>双方向クラウド同期(プレミアでも端末マスターの単方向のみ)</li>
+</ul>
+<h3 id="18">1.8 リスクと対応</h3>
+<table>
+<thead>
+<tr>
+<th>リスク</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ストア審査(金融関連)</td>
+<td>設定内に注意事項・免責事項を常設。助言をしないことを明記</td>
+</tr>
+<tr>
+<td>投資助言・代理業への抵触</td>
+<td>アプリは事実の可視化に徹し、売買・条件の推奨機能を持たない</td>
+</tr>
+<tr>
+<td>通知のズレによる信頼低下</td>
+<td>通知文言は必ず「予定」表記。引き落とし日は前後する旨を免責に記載</td>
+</tr>
+<tr>
+<td>端末紛失によるデータ喪失</td>
+<td>エクスポート機能の案内(免責に記載)。恒久対応はプレミアのクラウド同期</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2">2. 画面一覧</h2>
+<table>
+<thead>
+<tr>
+<th>画面ID</th>
+<th>画面名</th>
+<th>種別</th>
+<th>プラン</th>
+<th>モック</th>
+<th>概要</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S-01</td>
+<td>ホーム</td>
+<td>タブ</td>
+<td>全</td>
+<td>済</td>
+<td>タグバー・サマリー・近づく期日・unit一覧</td>
+</tr>
+<tr>
+<td>S-02</td>
+<td>入出金</td>
+<td>タブ</td>
+<td>全</td>
+<td>済</td>
+<td>年間トータル・月別棒グラフ(口座色)・口座別/日付別明細</td>
+</tr>
+<tr>
+<td>S-03</td>
+<td>イベント一覧</td>
+<td>タブ</td>
+<td>全</td>
+<td>済</td>
+<td>対応中/解決済のイベント、経緯ログ・費用の展開表示</td>
+</tr>
+<tr>
+<td>S-04</td>
+<td>設定</td>
+<td>タブ</td>
+<td>全</td>
+<td>済</td>
+<td>表示設定・プラン・通知・データ管理・注意事項/ロゴ</td>
+</tr>
+<tr>
+<td>S-05</td>
+<td>物件(unit)詳細</td>
+<td>遷移</td>
+<td>全</td>
+<td>済</td>
+<td>セクションカード方式。この物件のすべての入口(基本情報/契約/収支/ローン/定期支出/評価額/イベント/操作)</td>
+</tr>
+<tr>
+<td>S-06</td>
+<td>収支記録入力</td>
+<td>モーダル</td>
+<td>全</td>
+<td>済</td>
+<td>収入/支出・カテゴリ・金額・日付・物件・口座・紐付け</td>
+</tr>
+<tr>
+<td>S-07</td>
+<td>物件登録ウィザード</td>
+<td>遷移</td>
+<td>全</td>
+<td>未</td>
+<td>最小3問(名称/家賃と入金日/返済額と引き落とし日)。詳細は後からunit詳細で</td>
+</tr>
+<tr>
+<td>S-08</td>
+<td>口座管理</td>
+<td>遷移</td>
+<td>全</td>
+<td>未</td>
+<td>口座の追加・編集・並び替え・アーカイブ。色の割り当て</td>
+</tr>
+<tr>
+<td>S-09</td>
+<td>タグ管理</td>
+<td>遷移</td>
+<td>全</td>
+<td>未</td>
+<td>ユーザータグのCRUD。システムタグは表示のみ</td>
+</tr>
+<tr>
+<td>S-10</td>
+<td>定期収支ルール管理</td>
+<td>遷移</td>
+<td>全</td>
+<td>未</td>
+<td>定期ルールの一覧・編集・停止</td>
+</tr>
+<tr>
+<td>S-11</td>
+<td>アーカイブの管理</td>
+<td>遷移</td>
+<td>全</td>
+<td>未</td>
+<td>アーカイブ済み一覧・復元・完全削除(連鎖範囲の明示)</td>
+</tr>
+<tr>
+<td>S-12</td>
+<td>プラン購入(ペイウォール)</td>
+<td>モーダル</td>
+<td>全</td>
+<td>未</td>
+<td>スタンダードの訴求・購入・復元</td>
+</tr>
+<tr>
+<td>S-13</td>
+<td>イベント作成/編集</td>
+<td>遷移</td>
+<td>全</td>
+<td>未</td>
+<td>タイプ・タイトル・期日・経緯・収支紐付け</td>
+</tr>
+<tr>
+<td>S-19</td>
+<td>分析(タブ)</td>
+<td>タブ</td>
+<td>Std(フリーはプレビュー)</td>
+<td>済</td>
+<td>タグ横断ダッシュボード。フリーには🔒プレビュー+申し込み導線</td>
+</tr>
+<tr>
+<td>S-14</td>
+<td>物件情報編集</td>
+<td>遷移</td>
+<td>全</td>
+<td>未</td>
+<td>名称・タイプ・所在地・面積・構造・築年・取得情報・敷地権・管理会社・総会時期(開催月)</td>
+</tr>
+<tr>
+<td>S-15</td>
+<td>契約管理</td>
+<td>遷移</td>
+<td>全</td>
+<td>未</td>
+<td>契約履歴一覧・新規契約・契約編集・契約終了(退去)</td>
+</tr>
+<tr>
+<td>S-16</td>
+<td>ローン編集</td>
+<td>遷移</td>
+<td>全</td>
+<td>未</td>
+<td>simple 4項目/detailed追記・按分設定</td>
+</tr>
+<tr>
+<td>S-17</td>
+<td>定期ルール編集</td>
+<td>遷移</td>
+<td>全</td>
+<td>未</td>
+<td>管理費・修繕積立金・管理委託料等の定期支出</td>
+</tr>
+<tr>
+<td>S-18</td>
+<td>評価額ウィザード</td>
+<td>遷移</td>
+<td>全(v1.x)</td>
+<td>未</td>
+<td>路線価×補正×敷地面積×敷地権割合で参考評価額を算出</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>タブ構成(ファミリー共通の中央ホーム型): <strong>入出金・イベント |(中央・円形)ホーム| 分析・設定</strong>(+FABで収支記録)。中央の円形ホームボタンは配当の森・家計の森と同じ型</li>
+<li>S-07〜S-18はモック第2弾で作成予定</li>
+<li><strong>入力面の3層原則</strong>(7.9): ポップアップ=高頻度・1分以内/専用画面=低頻度・構造的(unit詳細がハブ)/設定タブ=アプリ横断のみ(物件固有の項目は置かない)</li>
+</ul>
+<hr />
+<h2 id="3">3. 画面項目一覧</h2>
+<h3 id="s-01">S-01 ホーム</h3>
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>項目</th>
+<th>種別</th>
+<th>内容・仕様</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>ヘッダー</td>
+<td>表示</td>
+<td>アプリ名「不動産の森 by MORINCUM」+マスコットアイコン</td>
+</tr>
+<tr>
+<td>2</td>
+<td>タグバー</td>
+<td>操作</td>
+<td>横スクロール。システムタグ(すべて/都道府県/空室/売却済)+ユーザータグ(◆印)。単一選択(v1はANDなし)。末尾に「＋」でタグ追加</td>
+</tr>
+<tr>
+<td>3</td>
+<td>サマリーカード</td>
+<td>表示</td>
+<td>選択タグの「今月の手残り(定期分)」= 家賃計 − 管理費等 − ローン返済。稼働戸数/総戸数、家賃計、対応中トラブル件数バッジ</td>
+</tr>
+<tr>
+<td>4</td>
+<td>近づく期日</td>
+<td>表示</td>
+<td>直近の「引き落とし前日」「総会等イベント期日」「契約満了」を日付順に最大3件</td>
+</tr>
+<tr>
+<td>5</td>
+<td>unit一覧</td>
+<td>表示/操作</td>
+<td>選択タグで絞り込み。カード: 名称、月次CF(+緑/−テラコッタ)、バッジ(空室/P駐車場/🏛◯月総会)、タグチップ、表面利回り(取得価格がある場合のみ)。タップでS-05へ</td>
+</tr>
+<tr>
+<td>6</td>
+<td>件数表示</td>
+<td>表示</td>
+<td>「物件(n/5件・フリープラン)」。スタンダードは上限非表示</td>
+</tr>
+<tr>
+<td>6b</td>
+<td>物件を追加カード</td>
+<td>操作</td>
+<td>unit一覧末尾の点線カード「＋物件を追加」(→S-07登録ウィザード)。フリー上限到達時は「上限に達しています」+スタンダード誘導に切替</td>
+</tr>
+<tr>
+<td>7</td>
+<td>ロックカード</td>
+<td>表示</td>
+<td>タグ横断ダッシュボード(スタンダード訴求)。タップでS-12</td>
+</tr>
+<tr>
+<td>8</td>
+<td>FAB</td>
+<td>操作</td>
+<td>「＋」→S-06</td>
+</tr>
+</tbody>
+</table>
+<h3 id="s-02">S-02 入出金</h3>
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>項目</th>
+<th>種別</th>
+<th>内容・仕様</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>年間トータルカード</td>
+<td>表示</td>
+<td>「{年}の入出金」収入計・支出計・差引。注記「実績+{当月+1}月以降は予定」</td>
+</tr>
+<tr>
+<td>2</td>
+<td>月別棒グラフ</td>
+<td>表示/操作</td>
+<td>1〜12月。各月2本(左=入金/右=出金・淡)、<strong>口座色の積み上げ</strong>。未来月は薄色(予定)。月タップで下部明細を切替</td>
+</tr>
+<tr>
+<td>3</td>
+<td>凡例</td>
+<td>表示</td>
+<td>口座名と色、「左=入金/右=出金」「薄色は予定」</td>
+</tr>
+<tr>
+<td>4</td>
+<td>月ヘッダー</td>
+<td>表示/操作</td>
+<td>「{年}{月}月」+「入出金(予定)」+当月差引。◀▶で月移動</td>
+</tr>
+<tr>
+<td>5</td>
+<td>明細(銀行ごと)</td>
+<td>表示</td>
+<td>口座別カード。行: 日付、色バー(緑=入金/テラコッタ=出金)、ラベル(内容+unit名)、金額。末尾に口座差引(色付き背景)</td>
+</tr>
+<tr>
+<td>6</td>
+<td>資金不足ヒント</td>
+<td>表示</td>
+<td>口座差引がマイナスの場合「出金予定が入金予定を{金額}上回ります。残高をご確認ください」</td>
+</tr>
+<tr>
+<td>7</td>
+<td>明細(日付ごと)</td>
+<td>表示</td>
+<td>設定で切替。全口座を日付順に一本化。行に口座色バー+口座名。末尾に全口座差引</td>
+</tr>
+<tr>
+<td>8</td>
+<td>通知案内</td>
+<td>表示</td>
+<td>「引き落とし前日18:00に通知(設定で変更可)」</td>
+</tr>
+<tr>
+<td>9</td>
+<td>免責注記</td>
+<td>表示</td>
+<td>「表示は登録内容にもとづく予定。実際の入出金・残高は銀行口座で確認」</td>
+</tr>
+</tbody>
+</table>
+<h3 id="s-03">S-03 イベント一覧</h3>
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>項目</th>
+<th>種別</th>
+<th>内容・仕様</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>セクション</td>
+<td>表示</td>
+<td>「対応中(n)」「解決済」に分類</td>
+</tr>
+<tr>
+<td>2</td>
+<td>イベントカード</td>
+<td>表示/操作</td>
+<td>アイコン(⚠️トラブル/📄更新/🏛総会/📌その他)、タイトル、タイプ・unit名・発生日・期日、費用累計(支出はテラコッタ)。タップで展開</td>
+</tr>
+<tr>
+<td>3</td>
+<td>展開: 経緯ログ</td>
+<td>表示</td>
+<td>日付+本文の追記型タイムライン</td>
+</tr>
+<tr>
+<td>4</td>
+<td>展開: 紐付け費用</td>
+<td>表示</td>
+<td>ラベル+金額(収入=+緑/支出=−テラコッタ、「(予定)」表記対応)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>展開: 操作</td>
+<td>操作</td>
+<td>「経緯を追記」「収支を紐付け」「解決済にする」(対応中のみ)</td>
+</tr>
+<tr>
+<td>6</td>
+<td>ロックカード</td>
+<td>表示</td>
+<td>イベント費用の横断集計(スタンダード訴求)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="s-04-v113">S-04 設定(ファミリー共通の型・配当の森v1.1.3準拠)</h3>
+<p>セクション順序はファミリーで統一する: <strong>契約状態 → 各種設定 → データ → データ管理 → セキュリティ → 利用規約 → 注意事項 → ロゴ/©</strong></p>
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>セクション</th>
+<th>種別</th>
+<th>内容・仕様</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>契約状態</td>
+<td>表示/操作</td>
+<td>プランバッジ(フリープラン等)+アップグレード訴求文+「スタンダードプランに申し込む」ボタン(→S-12)+「購入の復元」</td>
+</tr>
+<tr>
+<td>2</td>
+<td>表示</td>
+<td>操作</td>
+<td>入出金明細のまとめ方: 銀行ごと/日付ごと(セグメント)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>通知</td>
+<td>操作</td>
+<td>トグル: 引き落とし前日(18:00)/契約満了3ヶ月前/イベント期日/月初の家賃入金確認</td>
+</tr>
+<tr>
+<td>4</td>
+<td>データ</td>
+<td>操作</td>
+<td>ナビ: 口座の管理/タグの管理/定期収支ルール/アーカイブの管理</td>
+</tr>
+<tr>
+<td>5</td>
+<td>データ管理</td>
+<td>操作</td>
+<td>アクションボタン行: CSVエクスポート(🔒書出)/全物件の削除(削除・赤)/アプリの初期化(初期化・赤)。破壊的操作は二重確認</td>
+</tr>
+<tr>
+<td>6</td>
+<td>セキュリティ</td>
+<td>操作</td>
+<td>PINロック(4桁)トグル。ローカルデータ保護の要</td>
+</tr>
+<tr>
+<td>7</td>
+<td>利用規約</td>
+<td>操作</td>
+<td>利用規約/プライバシーポリシー/特定商取引法に基づく表示(morincum.jp掲載内容を表示)</td>
+</tr>
+<tr>
+<td>8</td>
+<td>注意事項・免責事項</td>
+<td>表示</td>
+<td>6部構成(経営・投資判断/入出金の表示/ローンの計算/データの保存・管理/<strong>サブスクリプション</strong>/税務・法律)。詳細は7.6</td>
+</tr>
+<tr>
+<td>9</td>
+<td>ロゴ・コピーライト</td>
+<td>表示</td>
+<td>注意事項カード内末尾にMORINCUMロゴ(無加工)+「© 2026 Morincum All rights reserved.」+バージョン</td>
+</tr>
+</tbody>
+</table>
+<h3 id="s-05-unit">S-05 物件(unit)詳細(セクションカード方式)</h3>
+<p>各セクションは「表示カード+編集›」の構成。未入力のセクションには「未入力」バッジを表示し、埋める動機づけとする(最初に全部聞かない・入口は常に見える)。</p>
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>セクション</th>
+<th>種別</th>
+<th>内容・仕様</th>
+<th>編集先</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>戻る/ヘッダー</td>
+<td>表示</td>
+<td>unit名+タイプ</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2</td>
+<td>収支カード</td>
+<td>表示</td>
+<td>4分割: 家賃(緑)/ローン返済(テラコッタ)/管理費等(テラコッタ)/手残り(大・符号色)。直近6ヶ月ミニバー</td>
+<td>—</td>
+</tr>
+<tr>
+<td>3</td>
+<td>契約</td>
+<td>表示/操作</td>
+<td>有効契約: 期間・種別・賃料/入金日・敷金/礼金/更新料・メモ。「契約を編集」「契約を終了(退去を記録)」。契約なし: 「有効な契約がありません(空室)」+「新しい契約」</td>
+<td>S-15</td>
+</tr>
+<tr>
+<td>4</td>
+<td>基本情報</td>
+<td>表示</td>
+<td>構造・築年・取得情報・専有面積・敷地権・管理会社・総会時期(未入力項目はバッジ)</td>
+<td>S-14</td>
+</tr>
+<tr>
+<td>5</td>
+<td>ローン</td>
+<td>表示</td>
+<td>月額(按分後)・口座・日。detailed: 残債・金利・完済年/simple: 🔒分析案内</td>
+<td>S-16</td>
+</tr>
+<tr>
+<td>6</td>
+<td>定期支出</td>
+<td>表示</td>
+<td>管理費・修繕積立金・管理委託料の一覧</td>
+<td>S-17</td>
+</tr>
+<tr>
+<td>7</td>
+<td>評価額</td>
+<td>表示</td>
+<td>現在評価額(参考)。未入力時は「路線価から計算」導線(v1.x)</td>
+<td>S-18</td>
+</tr>
+<tr>
+<td>8</td>
+<td>イベント</td>
+<td>表示</td>
+<td>この物件のイベント一覧(ステータスバッジ付き)</td>
+<td>S-13</td>
+</tr>
+<tr>
+<td>9</td>
+<td>物件の操作</td>
+<td>操作</td>
+<td>「売却を記録」/「アーカイブ」+完全削除の案内(設定›アーカイブの管理へ)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>「契約を終了」実行時は退去イベント(moveout)を自動生成し、原状回復・クリーニング・敷金精算・募集費用のチェックリストを展開する(P-15)。</p>
+<h3 id="s-06">S-06 収支記録入力(モーダル)</h3>
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>項目</th>
+<th>種別</th>
+<th>内容・仕様</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>収支トグル</td>
+<td>操作</td>
+<td>収入(緑)/支出(テラコッタ)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>カテゴリ</td>
+<td>操作</td>
+<td>収入: 家賃/共益費/更新料/礼金/その他。支出: 修繕費/管理費/修繕積立金/管理委託料/固定資産税/保険料/その他(確定申告の経費区分に整合。ユーザー追加可)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>金額</td>
+<td>入力</td>
+<td>整数円</td>
+</tr>
+<tr>
+<td>4</td>
+<td>日付</td>
+<td>入力</td>
+<td>既定=当日</td>
+</tr>
+<tr>
+<td>5</td>
+<td>物件</td>
+<td>選択</td>
+<td>unit選択</td>
+</tr>
+<tr>
+<td>6</td>
+<td>口座</td>
+<td>選択</td>
+<td>任意</td>
+</tr>
+<tr>
+<td>7</td>
+<td>メモ・イベント紐付け</td>
+<td>入力</td>
+<td>任意。イベント選択でevent_cashflowsを作成</td>
+</tr>
+<tr>
+<td>8</td>
+<td>記録ボタン</td>
+<td>操作</td>
+<td>保存して閉じる</td>
+</tr>
+</tbody>
+</table>
+<h3 id="s-07s-18">S-07〜S-18(概要)</h3>
+<ul>
+<li><strong>S-07 物件登録ウィザード</strong>: 最小3問(名称/家賃と入金日/返済額と引き落とし日)で完了し、入出金ビューが即動き出す。詳細(契約・取得情報・敷地権等)はunit詳細の各セクションから後入力。完了時に定期ルール・システムタグを自動生成</li>
+<li><strong>S-14〜S-18(unit詳細ハブの編集画面)</strong>: いずれも低頻度・構造的な入力。S-15契約管理は履歴一覧を持ち、「新しい契約」「契約を終了(退去)」のライフサイクル操作を提供。S-18評価額ウィザードは路線価・敷地面積・敷地権割合・賃貸中か(貸家建付地)を入力し参考評価額を算出(v1.x)</li>
+<li><strong>S-08 口座管理</strong>: 追加(表示名・銀行名のみ。口座番号は持たない)、色割り当て、アーカイブ</li>
+<li><strong>S-11 アーカイブの管理</strong>: アーカイブ済みのunit/口座/ローン/タグの一覧、復元、完全削除(「収支記録n件・イベントn件も削除されます」の連鎖明示+確認)</li>
+<li><strong>S-12 ペイウォール</strong>: スタンダード機能一覧、月額/年額、購入・リストア(RevenueCat)</li>
+</ul>
+<hr />
+<h2 id="4-er">4. ER図</h2>
+<div class="mermaid">erDiagram
+    UNITS ||--o{ UNIT_TAGS : &quot;付与&quot;
+    UNITS ||--o{ CONTRACTS : &quot;賃貸借契約&quot;
+    TAGS  ||--o{ UNIT_TAGS : &quot;付与&quot;
+    UNITS ||--o{ CASHFLOW_RECORDS : &quot;収支&quot;
+    ACCOUNTS ||--o{ CASHFLOW_RECORDS : &quot;入出金口座&quot;
+    UNITS ||--o{ RECURRING_RULES : &quot;定期収支&quot;
+    ACCOUNTS ||--o{ RECURRING_RULES : &quot;入出金口座&quot;
+    RECURRING_RULES ||--o{ CASHFLOW_RECORDS : &quot;生成&quot;
+    LOANS ||--o{ LOAN_ALLOCATIONS : &quot;按分&quot;
+    UNITS ||--o{ LOAN_ALLOCATIONS : &quot;帰属&quot;
+    ACCOUNTS ||--o{ LOANS : &quot;引き落とし口座&quot;
+    UNITS ||--o{ EVENTS : &quot;発生&quot;
+    EVENTS ||--o{ EVENT_CASHFLOWS : &quot;紐付け&quot;
+    CASHFLOW_RECORDS ||--o{ EVENT_CASHFLOWS : &quot;紐付け&quot;
+
+    UNITS {
+        TEXT id PK &quot;UUID&quot;
+        TEXT name
+        TEXT unit_type &quot;room/parking/other&quot;
+        TEXT status &quot;active/vacant/sold&quot;
+        INTEGER purchase_price &quot;任意&quot;
+        INTEGER exclusive_area_m2 &quot;任意&quot;
+        INTEGER site_area_m2 &quot;任意&quot;
+        REAL site_right_ratio &quot;任意&quot;
+        TEXT sold_date &quot;任意&quot;
+        TEXT archived_at &quot;任意&quot;
+    }
+    TAGS {
+        TEXT id PK
+        TEXT name
+        TEXT tag_type &quot;system/user&quot;
+        TEXT color
+        TEXT archived_at
+    }
+    ACCOUNTS {
+        TEXT id PK
+        TEXT name &quot;表示名&quot;
+        TEXT bank_name
+        TEXT color
+        TEXT archived_at
+    }
+    LOANS {
+        TEXT id PK
+        TEXT lender_name
+        TEXT account_id FK
+        INTEGER payment_day
+        INTEGER monthly_payment
+        TEXT input_mode &quot;simple/detailed&quot;
+        INTEGER principal &quot;detailed&quot;
+        REAL interest_rate &quot;detailed&quot;
+        TEXT archived_at
+    }
+    CASHFLOW_RECORDS {
+        TEXT id PK
+        TEXT unit_id FK
+        TEXT direction &quot;income/expense&quot;
+        TEXT category
+        INTEGER amount &quot;円&quot;
+        TEXT date
+        TEXT account_id FK &quot;任意&quot;
+        TEXT recurring_rule_id FK &quot;任意&quot;
+    }
+    RECURRING_RULES {
+        TEXT id PK
+        TEXT unit_id FK
+        TEXT direction
+        TEXT category
+        INTEGER amount
+        INTEGER day_of_month
+        INTEGER active
+    }
+    EVENTS {
+        TEXT id PK
+        TEXT unit_id FK
+        TEXT event_type &quot;trouble/renewal/meeting/moveout/other&quot;
+        TEXT title
+        TEXT status &quot;open/closed&quot;
+        TEXT due_date &quot;任意&quot;
+    }
+    CONTRACTS {
+        TEXT id PK
+        TEXT unit_id FK
+        TEXT status &quot;active/notice/ended&quot;
+        TEXT contract_type &quot;普通借家/定期借家/月極&quot;
+        TEXT start_date
+        TEXT end_date &quot;任意&quot;
+        INTEGER rent &quot;円&quot;
+        INTEGER rent_day
+        TEXT rent_account_id FK
+        INTEGER deposit &quot;敷金&quot;
+        INTEGER key_money &quot;礼金&quot;
+        INTEGER renewal_fee &quot;更新料&quot;
+    }
+</div>
+<hr />
+<h2 id="5">5. テーブル定義</h2>
+<ul>
+<li>ストレージ: 端末内SQLite(expo-sqlite)</li>
+<li>主キーはすべて<strong>アプリ生成のUUID(TEXT)</strong>。プレミアのクラウド同期時に衝突なくアップロードするため</li>
+<li>金額はすべて<strong>整数(円)</strong>。浮動小数は使用しない</li>
+<li>日付・日時はISO 8601文字列(TEXT)</li>
+<li>削除の3層モデル: <strong>訂正</strong>(明細のハード削除)/<strong>アーカイブ</strong>(<code>archived_at</code>)/<strong>完全削除</strong>(S-11のみ、連鎖明示)</li>
+</ul>
+<h3 id="51-units">5.1 units(貸出単位)</h3>
+<p>「賃料が発生する貸出単位」。部屋・駐車場区画・その他を同一構造で扱う。<strong>v0.2で家賃・契約関連(rent/rent_day/rent_account_id/contract_end_date)はcontracts(5.5)へ移管</strong>。空室は「有効な契約の有無」から導出する。</p>
+<table>
+<thead>
+<tr>
+<th>カラム</th>
+<th>型</th>
+<th>制約</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>id</td>
+<td>TEXT</td>
+<td>PK</td>
+<td>UUID</td>
+</tr>
+<tr>
+<td>name</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>表示名(例: パークサイド代々木 402)</td>
+</tr>
+<tr>
+<td>unit_type</td>
+<td>TEXT</td>
+<td>NOT NULL DEFAULT 'room'</td>
+<td>room / parking / other。将来の消費税区分(駐車場=課税売上)の基礎</td>
+</tr>
+<tr>
+<td>status</td>
+<td>TEXT</td>
+<td>NOT NULL DEFAULT 'active'</td>
+<td>active(運用中)/ sold(売却済)。※空室はstatusでなく有効契約の有無から導出</td>
+</tr>
+<tr>
+<td>purchase_date</td>
+<td>TEXT</td>
+<td></td>
+<td>取得日(任意)</td>
+</tr>
+<tr>
+<td>purchase_price</td>
+<td>INTEGER</td>
+<td></td>
+<td>取得価格(任意。駐車場等はNULL可。NULL時は利回り非表示)</td>
+</tr>
+<tr>
+<td>acquisition_costs</td>
+<td>INTEGER</td>
+<td></td>
+<td>取得諸費用(任意)</td>
+</tr>
+<tr>
+<td>building_ratio</td>
+<td>INTEGER</td>
+<td></td>
+<td>建物割合%(減価償却の導出用)</td>
+</tr>
+<tr>
+<td>building_structure</td>
+<td>TEXT</td>
+<td></td>
+<td>RC / S / 木造 等(法定耐用年数の導出用)</td>
+</tr>
+<tr>
+<td>built_year</td>
+<td>INTEGER</td>
+<td></td>
+<td>築年</td>
+</tr>
+<tr>
+<td>current_valuation</td>
+<td>INTEGER</td>
+<td></td>
+<td>現在評価額(任意・参考)。S-18評価額ウィザードの出力先</td>
+</tr>
+<tr>
+<td>exclusive_area_m2</td>
+<td>REAL</td>
+<td></td>
+<td>専有面積(任意)</td>
+</tr>
+<tr>
+<td>site_area_m2</td>
+<td>REAL</td>
+<td></td>
+<td>敷地全体面積(任意・路線価評価用)</td>
+</tr>
+<tr>
+<td>site_right_ratio</td>
+<td>REAL</td>
+<td></td>
+<td>敷地権割合(任意・路線価評価用。例: 0.0123)</td>
+</tr>
+<tr>
+<td>management_company</td>
+<td>TEXT</td>
+<td></td>
+<td>管理会社名・連絡先メモ(任意)</td>
+</tr>
+<tr>
+<td>assembly_month</td>
+<td>INTEGER</td>
+<td></td>
+<td>管理組合総会の開催月(1-12・任意)。ホームのカードにバッジ表示、前月に総会イベント作成を提案(P-18)</td>
+</tr>
+<tr>
+<td>sold_date</td>
+<td>TEXT</td>
+<td></td>
+<td>売却日(「売却を記録」で設定)</td>
+</tr>
+<tr>
+<td>sold_price</td>
+<td>INTEGER</td>
+<td></td>
+<td>売却額</td>
+</tr>
+<tr>
+<td>note</td>
+<td>TEXT</td>
+<td></td>
+<td>備考</td>
+</tr>
+<tr>
+<td>archived_at</td>
+<td>TEXT</td>
+<td></td>
+<td>アーカイブ日時(NULL=現役)</td>
+</tr>
+<tr>
+<td>created_at / updated_at</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="52-tags-unit_tags">5.2 tags / unit_tags</h3>
+<table>
+<thead>
+<tr>
+<th>tags</th>
+<th>型</th>
+<th>制約</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>id</td>
+<td>TEXT</td>
+<td>PK</td>
+<td>UUID</td>
+</tr>
+<tr>
+<td>name</td>
+<td>TEXT</td>
+<td>NOT NULL UNIQUE</td>
+<td></td>
+</tr>
+<tr>
+<td>tag_type</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>system(都道府県・空室・売却済等の自動付与)/ user(手動)</td>
+</tr>
+<tr>
+<td>color</td>
+<td>TEXT</td>
+<td></td>
+<td>表示色</td>
+</tr>
+<tr>
+<td>sort_order</td>
+<td>INTEGER</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>archived_at</td>
+<td>TEXT</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>unit_tags</th>
+<th>型</th>
+<th>制約</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>unit_id</td>
+<td>TEXT</td>
+<td>FK→units, PK(複合)</td>
+</tr>
+<tr>
+<td>tag_id</td>
+<td>TEXT</td>
+<td>FK→tags, PK(複合)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="53-accounts">5.3 accounts(口座)</h3>
+<p>口座番号・支店等は<strong>保持しない</strong>(個人情報最小化)。</p>
+<table>
+<thead>
+<tr>
+<th>カラム</th>
+<th>型</th>
+<th>制約</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>id</td>
+<td>TEXT</td>
+<td>PK</td>
+<td>UUID</td>
+</tr>
+<tr>
+<td>name</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>表示名(例: みずほ 不動産用)</td>
+</tr>
+<tr>
+<td>bank_name</td>
+<td>TEXT</td>
+<td></td>
+<td>銀行名</td>
+</tr>
+<tr>
+<td>color</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>グラフ・明細の識別色(自動割当+変更可)</td>
+</tr>
+<tr>
+<td>memo</td>
+<td>TEXT</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>sort_order</td>
+<td>INTEGER</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>archived_at</td>
+<td>TEXT</td>
+<td></td>
+<td>解約時はアーカイブ(過去明細の参照を守る)</td>
+</tr>
+<tr>
+<td>created_at</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="54-loans-loan_allocations">5.4 loans / loan_allocations</h3>
+<p>2段階入力: <strong>simple</strong>(フリー: 銀行・口座・引き落とし日・月額の4項目)/<strong>detailed</strong>(スタンダード: +元本・金利・期間で残債/利息内訳/手残り分析を解放)。同一レコードの項目追記で昇格し、データ入れ直しを発生させない。</p>
+<table>
+<thead>
+<tr>
+<th>loans</th>
+<th>型</th>
+<th>制約</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>id</td>
+<td>TEXT</td>
+<td>PK</td>
+<td>UUID</td>
+</tr>
+<tr>
+<td>lender_name</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>借入銀行</td>
+</tr>
+<tr>
+<td>account_id</td>
+<td>TEXT</td>
+<td>FK→accounts</td>
+<td>引き落とし口座</td>
+</tr>
+<tr>
+<td>payment_day</td>
+<td>INTEGER</td>
+<td>NOT NULL</td>
+<td>引き落とし日</td>
+</tr>
+<tr>
+<td>monthly_payment</td>
+<td>INTEGER</td>
+<td>NOT NULL</td>
+<td>月々の返済額(simpleは入力値/detailedは算出キャッシュ)</td>
+</tr>
+<tr>
+<td>input_mode</td>
+<td>TEXT</td>
+<td>NOT NULL DEFAULT 'simple'</td>
+<td>simple / detailed</td>
+</tr>
+<tr>
+<td>principal</td>
+<td>INTEGER</td>
+<td></td>
+<td>借入額(detailed)</td>
+</tr>
+<tr>
+<td>interest_rate</td>
+<td>REAL</td>
+<td></td>
+<td>年利%(detailed)</td>
+</tr>
+<tr>
+<td>rate_type</td>
+<td>TEXT</td>
+<td></td>
+<td>fixed / variable(detailed)</td>
+</tr>
+<tr>
+<td>term_months</td>
+<td>INTEGER</td>
+<td></td>
+<td>期間(detailed)</td>
+</tr>
+<tr>
+<td>start_date</td>
+<td>TEXT</td>
+<td></td>
+<td>返済開始(detailed)</td>
+</tr>
+<tr>
+<td>repayment_method</td>
+<td>TEXT</td>
+<td></td>
+<td>annuity(元利均等)/ principal_equal(元金均等)</td>
+</tr>
+<tr>
+<td>note</td>
+<td>TEXT</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>archived_at</td>
+<td>TEXT</td>
+<td></td>
+<td>完済時は「完済を記録」でアーカイブ</td>
+</tr>
+<tr>
+<td>created_at / updated_at</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>返済予定表はテーブルに保存せず都度計算(P-06)。金利改定履歴(loan_rate_changes)はv1.x候補。</p>
+<table>
+<thead>
+<tr>
+<th>loan_allocations</th>
+<th>型</th>
+<th>制約</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>loan_id</td>
+<td>TEXT</td>
+<td>FK→loans, PK(複合)</td>
+<td></td>
+</tr>
+<tr>
+<td>unit_id</td>
+<td>TEXT</td>
+<td>FK→units, PK(複合)</td>
+<td></td>
+</tr>
+<tr>
+<td>allocation_ratio</td>
+<td>REAL</td>
+<td>NOT NULL DEFAULT 1.0</td>
+<td>按分率(合計1.0)。区分1戸=1.0の1行。一棟ローンは複数行(既定=戸数均等、変更可)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="55-contractsv02">5.5 contracts(賃貸借契約)【v0.2新設】</h3>
+<p>入居状況・契約期間を独立エンティティで管理する。「入居中/空室」はunitの手動ステータスではなく<strong>有効契約の有無から自動導出</strong>し、契約履歴から空室期間・稼働率・更新率を正確に算出できる。</p>
+<table>
+<thead>
+<tr>
+<th>カラム</th>
+<th>型</th>
+<th>制約</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>id</td>
+<td>TEXT</td>
+<td>PK</td>
+<td>UUID</td>
+</tr>
+<tr>
+<td>unit_id</td>
+<td>TEXT</td>
+<td>FK→units NOT NULL</td>
+<td></td>
+</tr>
+<tr>
+<td>status</td>
+<td>TEXT</td>
+<td>NOT NULL DEFAULT 'active'</td>
+<td>active(契約中)/ notice(退去予告受領)/ ended(終了)</td>
+</tr>
+<tr>
+<td>contract_type</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>ordinary(普通借家)/ fixed_term(定期借家)/ monthly(月極・駐車場等)</td>
+</tr>
+<tr>
+<td>start_date</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>契約開始日</td>
+</tr>
+<tr>
+<td>end_date</td>
+<td>TEXT</td>
+<td></td>
+<td>満了日(月極等の期限なしはNULL)。更新通知(P-13)の起点</td>
+</tr>
+<tr>
+<td>rent</td>
+<td>INTEGER</td>
+<td>NOT NULL</td>
+<td>月額賃料(円)</td>
+</tr>
+<tr>
+<td>common_fee</td>
+<td>INTEGER</td>
+<td></td>
+<td>共益費(任意・賃料と分ける場合)</td>
+</tr>
+<tr>
+<td>rent_day</td>
+<td>INTEGER</td>
+<td>NOT NULL</td>
+<td>入金日</td>
+</tr>
+<tr>
+<td>rent_account_id</td>
+<td>TEXT</td>
+<td>FK→accounts</td>
+<td>入金口座</td>
+</tr>
+<tr>
+<td>deposit</td>
+<td>INTEGER</td>
+<td></td>
+<td>敷金(<strong>預り金</strong>。収入ではない。v1は退去精算の差額のみ収支記録)</td>
+</tr>
+<tr>
+<td>key_money</td>
+<td>INTEGER</td>
+<td></td>
+<td>礼金(収入。契約開始時にcashflow_records生成を提案)</td>
+</tr>
+<tr>
+<td>renewal_fee</td>
+<td>INTEGER</td>
+<td></td>
+<td>更新料(収入。更新時に生成を提案)</td>
+</tr>
+<tr>
+<td>guarantor_company</td>
+<td>TEXT</td>
+<td></td>
+<td>保証会社(任意)</td>
+</tr>
+<tr>
+<td>tenant_memo</td>
+<td>TEXT</td>
+<td></td>
+<td>入居者メモ。個人情報最小化のため氏名等は必須にしない(「2階の法人契約」程度の識別を推奨)</td>
+</tr>
+<tr>
+<td>notice_date</td>
+<td>TEXT</td>
+<td></td>
+<td>退去予告受領日</td>
+</tr>
+<tr>
+<td>ended_date</td>
+<td>TEXT</td>
+<td></td>
+<td>実際の退去日</td>
+</tr>
+<tr>
+<td>created_at / updated_at</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>契約開始→家賃の定期ルール(recurring_rules)を自動生成。契約終了→ルール停止(=家賃生成が止まり空室の収支が自然に表現される)</li>
+<li>「契約を終了」操作は退去イベント(moveout)を自動生成する(P-15)</li>
+<li>定期借家は更新ではなく再契約(新しい契約レコード)として扱う</li>
+</ul>
+<h3 id="56-cashflow_records">5.6 cashflow_records(収支記録)</h3>
+<p>収入・支出を1テーブルで保持。</p>
+<table>
+<thead>
+<tr>
+<th>カラム</th>
+<th>型</th>
+<th>制約</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>id</td>
+<td>TEXT</td>
+<td>PK</td>
+<td>UUID</td>
+</tr>
+<tr>
+<td>unit_id</td>
+<td>TEXT</td>
+<td>FK→units NOT NULL</td>
+<td></td>
+</tr>
+<tr>
+<td>direction</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>income / expense(v1.xでtransfer追加予定)</td>
+</tr>
+<tr>
+<td>category</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>カテゴリマスタ参照(プリセット+ユーザー追加)</td>
+</tr>
+<tr>
+<td>amount</td>
+<td>INTEGER</td>
+<td>NOT NULL</td>
+<td>円</td>
+</tr>
+<tr>
+<td>date</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>発生日</td>
+</tr>
+<tr>
+<td>account_id</td>
+<td>TEXT</td>
+<td>FK→accounts</td>
+<td>任意</td>
+</tr>
+<tr>
+<td>recurring_rule_id</td>
+<td>TEXT</td>
+<td>FK→recurring_rules</td>
+<td>定期生成分の親(任意)</td>
+</tr>
+<tr>
+<td>memo</td>
+<td>TEXT</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>created_at</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>削除ガード: 前年以前の記録の削除時は「{年}の記録です。年間サマリー(申告資料)に影響します」と警告(禁止はしない)。</p>
+<h3 id="57-recurring_rules">5.7 recurring_rules(定期収支ルール)</h3>
+<table>
+<thead>
+<tr>
+<th>カラム</th>
+<th>型</th>
+<th>制約</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>id</td>
+<td>TEXT</td>
+<td>PK</td>
+<td>UUID</td>
+</tr>
+<tr>
+<td>unit_id</td>
+<td>TEXT</td>
+<td>FK→units NOT NULL</td>
+<td></td>
+</tr>
+<tr>
+<td>direction</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>income / expense</td>
+</tr>
+<tr>
+<td>category</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>例: 家賃、管理費、修繕積立金</td>
+</tr>
+<tr>
+<td>amount</td>
+<td>INTEGER</td>
+<td>NOT NULL</td>
+<td></td>
+</tr>
+<tr>
+<td>account_id</td>
+<td>TEXT</td>
+<td>FK→accounts</td>
+<td></td>
+</tr>
+<tr>
+<td>day_of_month</td>
+<td>INTEGER</td>
+<td>NOT NULL</td>
+<td></td>
+</tr>
+<tr>
+<td>start_month</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>YYYY-MM</td>
+</tr>
+<tr>
+<td>end_month</td>
+<td>TEXT</td>
+<td></td>
+<td>任意</td>
+</tr>
+<tr>
+<td>active</td>
+<td>INTEGER</td>
+<td>NOT NULL DEFAULT 1</td>
+<td>家賃ルールは契約(contracts)から自動生成され、契約終了で停止→空室率の算出根拠</td>
+</tr>
+<tr>
+<td>created_at</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="58-events-event_cashflows">5.8 events / event_cashflows</h3>
+<table>
+<thead>
+<tr>
+<th>events</th>
+<th>型</th>
+<th>制約</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>id</td>
+<td>TEXT</td>
+<td>PK</td>
+<td>UUID</td>
+</tr>
+<tr>
+<td>unit_id</td>
+<td>TEXT</td>
+<td>FK→units</td>
+<td>一棟全体の出来事は代表unitに紐付け(v1割り切り)</td>
+</tr>
+<tr>
+<td>event_type</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>trouble / renewal / meeting / <strong>moveout(退去)</strong> / other</td>
+</tr>
+<tr>
+<td>title</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td></td>
+</tr>
+<tr>
+<td>status</td>
+<td>TEXT</td>
+<td>NOT NULL DEFAULT 'open'</td>
+<td>open / closed</td>
+</tr>
+<tr>
+<td>occurred_date</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td>発生日</td>
+</tr>
+<tr>
+<td>due_date</td>
+<td>TEXT</td>
+<td></td>
+<td>対応期限・開催日(通知P-03の対象)</td>
+</tr>
+<tr>
+<td>log</td>
+<td>TEXT</td>
+<td>NOT NULL DEFAULT '[]'</td>
+<td>追記型の経緯ログ(JSON配列: {date, text})。保険請求・売却時の修繕履歴説明に転用可</td>
+</tr>
+<tr>
+<td>note</td>
+<td>TEXT</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>closed_at</td>
+<td>TEXT</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>created_at / updated_at</td>
+<td>TEXT</td>
+<td>NOT NULL</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>event_cashflows</th>
+<th>型</th>
+<th>制約</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>event_id</td>
+<td>TEXT</td>
+<td>FK→events, PK(複合)</td>
+</tr>
+<tr>
+<td>cashflow_record_id</td>
+<td>TEXT</td>
+<td>FK→cashflow_records, PK(複合)</td>
+</tr>
+</tbody>
+</table>
+<p>退去イベント(moveout)は原状回復費・クリーニング・鍵交換・敷金精算(差額)・募集費用(AD/仲介手数料)のチェックリストをテンプレートとして持ち、各項目の支出をポップアップ(S-06)で記録して紐付ける。</p>
+<p>双方向の価値: イベント→費用累計(このトラブルにいくらかかったか)/収支→文脈(この修繕費は何だったか)。</p>
+<h3 id="59-app_settings">5.9 app_settings(アプリ設定)</h3>
+<table>
+<thead>
+<tr>
+<th>カラム</th>
+<th>型</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>key</td>
+<td>TEXT PK</td>
+<td>例: flow_grouping(bank/date)、notification_*(トグル)</td>
+</tr>
+<tr>
+<td>value</td>
+<td>TEXT</td>
+<td>JSON可</td>
+</tr>
+</tbody>
+</table>
+<h3 id="510">5.10 サーバー側(共用・参照のみ)</h3>
+<p>本アプリ専用のサーバーDBは持たない。エンタイトルメントAPI(配当の森と共用)に以下のみ記録される: サイレントアカウントのsub ⇔ プラン状態(レシート検証結果)。</p>
+<hr />
+<h2 id="6">6. 内部処理一覧</h2>
+<p>形式: IPO(Input / Process / Output)。テスト設計時のテストベースとして使用する。</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>処理名</th>
+<th>トリガー</th>
+<th>Input</th>
+<th>Process</th>
+<th>Output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P-01</td>
+<td>定期収支の生成</td>
+<td>月替わり初回起動 / 月初通知タップ</td>
+<td>recurring_rules(active), 対象年月</td>
+<td>ルールから当月分のcashflow_recordsを生成(確認付き)。有効契約のないunitの家賃ルールはスキップ</td>
+<td>cashflow_records(recurring_rule_id付き)</td>
+</tr>
+<tr>
+<td>P-02</td>
+<td>入出金予定の集計</td>
+<td>S-02表示</td>
+<td>recurring_rules, loans(+allocations), cashflow_records, 選択年月</td>
+<td>口座別・日付順の入出金行を構築。口座差引・全体差引を算出。臨時記録をマージ</td>
+<td>明細行リスト、差引、資金不足ヒント判定</td>
+</tr>
+<tr>
+<td>P-03</td>
+<td>通知スケジューリング</td>
+<td>アプリ起動時 / データ変更時</td>
+<td>loans(payment_day), units(contract_end_date), events(due_date), 通知設定</td>
+<td>ローカル通知(expo-notifications)を再構築。<strong>iOSは予約上限64件のため直近分のみ予約し起動毎にローリング更新</strong>。文言は必ず「予定」表記</td>
+<td>端末内の通知予約</td>
+</tr>
+<tr>
+<td>P-04</td>
+<td>月次・年間集計</td>
+<td>S-02表示</td>
+<td>cashflow_records(実績), P-02(予定)</td>
+<td>月別に口座別内訳の入出金を集計。当月以前=実績、以降=予定として区別。年間トータル算出</td>
+<td>月別配列(グラフ用)、年間収入/支出/差引</td>
+</tr>
+<tr>
+<td>P-05</td>
+<td>手残り・利回り計算</td>
+<td>S-01/S-05表示</td>
+<td>units, recurring_rules, loans+allocations</td>
+<td>手残り=家賃(空室は0)−管理費等−按分後返済額。表面利回り=年間賃料/取得価格(取得価格NULL時は非算出)</td>
+<td>サマリー値</td>
+</tr>
+<tr>
+<td>P-06</td>
+<td>ローン計算</td>
+<td>S-05表示(detailed)</td>
+<td>loans(principal, rate, term, method, start)</td>
+<td>元利均等/元金均等の月次内訳(利息・元金)、残債、完済年を都度計算。テーブル保存しない</td>
+<td>残債・利息内訳・返済予定</td>
+</tr>
+<tr>
+<td>P-07</td>
+<td>減価償却の参考値算出</td>
+<td>年間サマリー表示(Std)</td>
+<td>units(purchase_price, building_ratio, structure, built_year)</td>
+<td>定額法で参考値を導出。<strong>保存せず表示時計算</strong>(保存すると訂正時に矛盾)</td>
+<td>減価償却費(参考値)</td>
+</tr>
+<tr>
+<td>P-08</td>
+<td>プラン判定</td>
+<td>起動時 / 購入時</td>
+<td>ストアレシート, サイレントsub</td>
+<td>エンタイトルメントAPIで検証し、プラン状態を端末キャッシュ(定期再検証)。オフライン時はキャッシュで動作</td>
+<td>plan(free/standard)、機能ゲート</td>
+</tr>
+<tr>
+<td>P-09</td>
+<td>サイレントアカウント発行</td>
+<td>初回起動</td>
+<td>—</td>
+<td>Cognito(不動産の森用App Client)で自動サインアップ。資格情報はSecureStore保存。ユーザーには一切見せない</td>
+<td>sub(端末内)</td>
+</tr>
+<tr>
+<td>P-10</td>
+<td>ライフサイクル操作</td>
+<td>S-05/S-11操作</td>
+<td>対象エンティティ</td>
+<td>売却を記録(status=sold+売却済タグ自動付与+既定表示から除外)/完済を記録/アーカイブ(archived_at設定)/完全削除(連鎖件数を提示→確認→削除)</td>
+<td>更新されたレコード</td>
+</tr>
+<tr>
+<td>P-11</td>
+<td>CSVエクスポート</td>
+<td>設定操作(Std)</td>
+<td>全テーブル</td>
+<td>unit・収支・ローン・イベントをCSV出力(共有シート)</td>
+<td>CSVファイル</td>
+</tr>
+<tr>
+<td>P-12</td>
+<td>システムタグ自動付与</td>
+<td>unit/契約の登録・更新</td>
+<td>units(所在地, status), contracts</td>
+<td>都道府県タグ・売却済タグを付与。空室タグは「有効契約なし」から導出して付与/解除</td>
+<td>unit_tags</td>
+</tr>
+<tr>
+<td>P-13</td>
+<td>契約満了の検知</td>
+<td>起動時</td>
+<td>contracts(end_date, contract_type)</td>
+<td>満了3ヶ月前に更新イベント(renewal)の作成を提案(定期借家は再契約として案内)。承諾で自動作成</td>
+<td>events提案</td>
+</tr>
+<tr>
+<td>P-14</td>
+<td>広告表示</td>
+<td>フリープランの画面表示</td>
+<td>plan</td>
+<td>AdMobバナー表示(配当の森の実装を流用)。Std以上は非表示</td>
+<td>広告ビュー</td>
+</tr>
+<tr>
+<td>P-15</td>
+<td>退去イベント生成</td>
+<td>S-15「契約を終了」</td>
+<td>contracts(対象契約)</td>
+<td>契約status=ended化+家賃ルール停止+moveoutイベントを自動生成(原状回復/クリーニング/敷金精算/募集費用のチェックリスト付き)</td>
+<td>events(moveout), recurring_rules更新</td>
+</tr>
+<tr>
+<td>P-16</td>
+<td>契約からの定期ルール生成</td>
+<td>S-15契約の作成・更新</td>
+<td>contracts</td>
+<td>家賃(+共益費)の定期ルールを自動生成・同期。礼金・更新料は収支記録の生成を提案</td>
+<td>recurring_rules, cashflow_records提案</td>
+</tr>
+<tr>
+<td>P-17</td>
+<td>評価額の算出(v1.x)</td>
+<td>S-18ウィザード</td>
+<td>路線価, 補正率, site_area_m2, site_right_ratio, 賃貸中か</td>
+<td>敷地利用権評価=路線価×補正×面積×敷地権割合。賃貸中は貸家建付地減額。参考値としてcurrent_valuationへ保存</td>
+<td>current_valuation</td>
+</tr>
+<tr>
+<td>P-18</td>
+<td>総会シーズンの検知</td>
+<td>起動時</td>
+<td>units(assembly_month)</td>
+<td>総会月の前月に「総会イベント(meeting)の作成」を提案。招集通知が届いたら開催日(due_date)を確定入力→期日通知(P-03)へ接続</td>
+<td>events提案</td>
+</tr>
+</tbody>
+</table>
+<p>処理共通の原則:</p>
+<ol>
+<li>すべての計算はオンデバイスで完結。ネットワーク必須なのはP-08のみ(オフライン時はキャッシュで全機能動作)</li>
+<li>派生指標(利回り・手残り・残債・減価償却)はDBに保存せず表示時に導出する</li>
+<li>予定(P-02/P-04の未来分)と実績(確定済みcashflow_records)を常に区別して扱う</li>
+</ol>
+<hr />
+<h2 id="7">7. デザインガイドライン</h2>
+<h3 id="71">7.1 カラートークン</h3>
+<p>ファミリー共通の考え方: 基調はMORINCUMの自然系トーン、<strong>アプリ固有のアクセント1色</strong>で家族内の役割を区別する。不動産の森のアクセントは<strong>テラコッタ(土・レンガ)</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>トークン</th>
+<th>値</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>bg</td>
+<td>#F6F4F0</td>
+<td>画面背景(暖色の紙)</td>
+</tr>
+<tr>
+<td>surface</td>
+<td>#FFFFFF</td>
+<td>カード背景</td>
+</tr>
+<tr>
+<td>border</td>
+<td>#E6DFD4</td>
+<td>罫線・区切り</td>
+</tr>
+<tr>
+<td>text</td>
+<td>#3A3229</td>
+<td>基本文字(墨色)</td>
+</tr>
+<tr>
+<td>muted</td>
+<td>#8C8072</td>
+<td>補助文字</td>
+</tr>
+<tr>
+<td>accent</td>
+<td>#A8552F</td>
+<td>アプリアクセント/出金・マイナス/CTA</td>
+</tr>
+<tr>
+<td>accentSoft</td>
+<td>#A8552F16</td>
+<td>アクセントの淡背景</td>
+</tr>
+<tr>
+<td>green</td>
+<td>#4E9B58</td>
+<td>入金・プラス(ファミリー共通の森の緑)</td>
+</tr>
+<tr>
+<td>greenSoft</td>
+<td>#4E9B5816</td>
+<td>緑の淡背景</td>
+</tr>
+<tr>
+<td>red</td>
+<td>#C94F4F</td>
+<td>トラブル・警告</td>
+</tr>
+<tr>
+<td>gold</td>
+<td>#D9962E</td>
+<td>更新・期日系</td>
+</tr>
+<tr>
+<td>lock</td>
+<td>#B0A695</td>
+<td>ロック(有料)状態の文字</td>
+</tr>
+</tbody>
+</table>
+<p>口座識別色(ユーザー割当・自動初期値): 例 #5B8DB8(青) / #C79A3B(アンバー)。<strong>アクセント(テラコッタ)・緑と衝突しない色相</strong>から割り当てる。</p>
+<h3 id="72">7.2 色の意味論(重要)</h3>
+<table>
+<thead>
+<tr>
+<th>対象</th>
+<th>色の使い方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>金額の符号</td>
+<td>収入・プラス=green / 支出・マイナス=accent。全画面で統一</td>
+</tr>
+<tr>
+<td>口座</td>
+<td>口座ごとの識別色。<strong>グラフの棒・明細の色バー・見出しの■</strong>に使用</td>
+</tr>
+<tr>
+<td>使い分けの原則</td>
+<td><strong>「口座=バーの色、収支=金額の色」</strong>。1画面に両方の色系が出るときも役割を混ぜない</td>
+</tr>
+</tbody>
+</table>
+<h3 id="73">7.3 タイポグラフィ・数値表記</h3>
+<ul>
+<li>書体: システムフォント(Hiragino Sans / Noto Sans JP)</li>
+<li>金額: 3桁区切り+「¥」。符号は「+/−」を明示し色と併用(色だけに依存しない)</li>
+<li>手残り等の主役数字は fontWeight 800、サイズで階層をつける(32&gt;22&gt;16&gt;14)</li>
+<li>日付は「25日」等の和文短縮。明細行は日付を左端の固定幅で揃える</li>
+</ul>
+<h3 id="74-morincumui">7.4 コンポーネント(→ @morincum/ui 候補)</h3>
+<table>
+<thead>
+<tr>
+<th>コンポーネント</th>
+<th>仕様</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Card</td>
+<td>白背景、radius 14、border 1px、padding 16</td>
+</tr>
+<tr>
+<td>Chip(タグ)</td>
+<td>radius 16。選択時=accent塗り+白字。ユーザータグは◆プレフィックス</td>
+</tr>
+<tr>
+<td>SectionTitle</td>
+<td>12px/700/muted、letterSpacing 1</td>
+</tr>
+<tr>
+<td>LockedCard</td>
+<td>破線ボーダー+🔒+「スタンダード」ピル。有料機能は隠さず見せて訴求</td>
+</tr>
+<tr>
+<td>金額表示</td>
+<td>符号+色+桁区切りをセットにした共通コンポーネント</td>
+</tr>
+<tr>
+<td>入出金行</td>
+<td>日付(固定幅)+色バー(6px)+ラベル2行+金額右寄せ</td>
+</tr>
+<tr>
+<td>FAB</td>
+<td>accent塗り、右下、記録入力への単一動線</td>
+</tr>
+<tr>
+<td>タブバー</td>
+<td>4タブ。選択=accent</td>
+</tr>
+<tr>
+<td>SettingsFooter</td>
+<td>注意事項ブロック+ロゴ+©+バージョン(ファミリー共通の型)</td>
+</tr>
+<tr>
+<td>SettingsLayout</td>
+<td>設定タブのセクション順序(契約状態→設定→データ→データ管理→セキュリティ→利用規約→注意事項)。配当の森v1.1.3準拠のファミリー共通型</td>
+</tr>
+<tr>
+<td>CenterTabBar</td>
+<td>中央に円形の浮いたホームボタン+左右にサイドタブのタブバー(配当の森・家計の森と共通の型)</td>
+</tr>
+<tr>
+<td>ActionRow</td>
+<td>データ管理行(タイトル+説明+右端アクションピル。破壊的操作は赤 #D9534F)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="75-ux">7.5 文言・UXライティング規約</h3>
+<ol>
+<li><strong>「予定」の明示</strong>: 入出金・通知は必ず「予定」と表記。断定しない(「引き落とし予定があります」)。実際の確認は銀行口座へ誘導</li>
+<li><strong>「削除」の追放</strong>: ライフサイクル完了は「売却を記録」「完済を記録」「アーカイブ」。「削除」の語は訂正と完全削除(S-11)のみ</li>
+<li><strong>「ログイン」の不使用</strong>: アカウント・ログインの概念を出さない。連携時も機能名(バックアップと連携 等)で包む</li>
+<li><strong>判断はユーザーに</strong>: 「〜が必要です」ではなく「〜を上回ります。ご確認ください」。助言・推奨の表現を避ける(審査・法規対応と一貫)</li>
+<li>トーン: やさしめ・自然・安心感(ブランド共通)。絵文字はアイコン代替として限定使用</li>
+</ol>
+<h3 id="76">7.6 注意事項・免責事項(設定内・常設)</h3>
+<p>6部構成: ①経営・投資判断について ②入出金の表示について ③ローンの計算について ④データの保存・管理について ⑤サブスクリプションについて ⑥税務・法律について。末尾にロゴ(無加工)+コピーライト。文言はモックS-04の実装を正とする。</p>
+<p>⑤サブスクリプションの必須記載(ストア審査・特商法対応):
+- 自動更新である旨と更新タイミング(期間終了24時間前までの解約で停止)
+- 解約方法はストアのサブスクリプション設定(アプリ削除では解約されない)
+- 解約後も支払い済み期間末まで利用可。<strong>日割り返金なし</strong>
+- <strong>返金はApple/Google各ストアの規定にもとづきストアへ申請</strong>(開発者は個別の返金処理を行えない)
+- 「購入の復元」の案内(機種変更時)
+- 特定商取引法にもとづく表示への参照(morincum.jp)</p>
+<h3 id="77">7.7 ロゴ使用</h3>
+<ul>
+<li>正式表記: Morincum(モリンカム)。Morincome / Morinkamu は誤記</li>
+<li>ロゴ画像は<strong>無加工で使用</strong>(色変更・トリミング等をしない)。白背景面(カード内)に配置</li>
+<li>アセットは @morincum/ui で管理(原寸PNG)。設定フッターでの表示幅: 約220-240px</li>
+</ul>
+<h3 id="78">7.8 通知デザイン</h3>
+<table>
+<thead>
+<tr>
+<th>通知</th>
+<th>タイミング</th>
+<th>文言例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>引き落とし前日</td>
+<td>前日18:00(変更可)</td>
+<td>「明日、みずほ銀行から ¥172,000 の引き落とし予定があります」</td>
+</tr>
+<tr>
+<td>契約満了接近</td>
+<td>3ヶ月前</td>
+<td>「402号の契約満了まで3ヶ月です。更新の準備をしましょう」</td>
+</tr>
+<tr>
+<td>イベント期日</td>
+<td>期日前日</td>
+<td>「明日: パークサイド代々木 管理組合総会」</td>
+</tr>
+<tr>
+<td>月初の家賃確認</td>
+<td>月初(任意ON)</td>
+<td>「先月分の家賃入金を確認しましょう」</td>
+</tr>
+</tbody>
+</table>
+<p>すべてローカル通知(サーバー不要)。iOS予約上限64件のローリング運用(P-03)。</p>
+<h3 id="79-3v02">7.9 入力面の3層原則【v0.2】</h3>
+<table>
+<thead>
+<tr>
+<th>層</th>
+<th>対象</th>
+<th>基準</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ポップアップ(モーダル)</td>
+<td>収支記録・経緯追記・月次確認</td>
+<td>高頻度・単発・1分以内で完了</td>
+</tr>
+<tr>
+<td>専用画面(unit詳細ハブ)</td>
+<td>物件情報・契約・ローン・定期支出・評価額</td>
+<td>低頻度・構造的。一度入れたらめったに変えない</td>
+</tr>
+<tr>
+<td>設定タブ</td>
+<td>口座・タグ・通知・表示・プラン・アーカイブ</td>
+<td>アプリ横断のみ。<strong>物件固有の項目は置かない</strong></td>
+</tr>
+</tbody>
+</table>
+<p>登録ウィザードは最小3問に留め、詳細はunit詳細の各セクション(未入力バッジ)から後入力させる。「最初に全部聞かない・入口は常に見える」を原則とする。</p>
+<hr />
+<h2 id="8">8. 未決事項・今後の検討</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>事項</th>
+<th>備考</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>フリー5件のカウント単位</td>
+<td>駐車場区画も1件と数えると厳しい可能性。0.5件カウント等の緩和はモック検証で判断</td>
+</tr>
+<tr>
+<td>2</td>
+<td>アプリ名称</td>
+<td>「不動産の森」は仮称。MoriNe構想との関係整理(商標: 第9・36・42類出願予定)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>タグのAND/OR絞り込み</td>
+<td>v1はAND(単一選択)のみ。複数選択はv1.x</td>
+</tr>
+<tr>
+<td>4</td>
+<td>一棟共通経費の按分入力支援</td>
+<td>v1は代表unit計上で割り切り</td>
+</tr>
+<tr>
+<td>5</td>
+<td>サブスク価格</td>
+<td>配当の森(¥480/月・¥4,800/年)との整合。ファミリー統合プラン構想</td>
+</tr>
+<tr>
+<td>6</td>
+<td>口座間振替</td>
+<td>direction=transfer で拡張予定(v1.x)</td>
+</tr>
+<tr>
+<td>7</td>
+<td>敷金の預り金管理</td>
+<td>v1は退去精算の差額のみ収支記録。預り金勘定の管理はv1.x</td>
+</tr>
+<tr>
+<td>8</td>
+<td>定期借家の再契約フロー</td>
+<td>通知文言・S-15の操作をv1.x で詳細化</td>
+</tr>
+<tr>
+<td>9</td>
+<td>評価額ウィザードの範囲</td>
+<td>v1.xは基本式+貸家建付地まで。区分所有補正率(2024年新ルール)は対象外とし税理士へ案内</td>
+</tr>
+<tr>
+<td>10</td>
+<td>言語設定(English)</td>
+<td>配当の森は日本語/English切替あり。不動産の森は国内特化のためv1は日本語のみ(要判断)</td>
+</tr>
+<tr>
+<td>11</td>
+<td>目標設定</td>
+<td>配当の森の「年間目標金額・達成年数」に相当する「年間手残り目標」をv1.xで検討(ファミリー体験の統一)</td>
+</tr>
+<tr>
+<td>12</td>
+<td>配当の森側への還流</td>
+<td>配当の森の注意事項に「サブスクリプションについて(返金・解約)」が未掲載。v1.1系で追加推奨</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9">9. 変更履歴</h2>
+<table>
+<thead>
+<tr>
+<th>版</th>
+<th>日付</th>
+<th>変更内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v0.1</td>
+<td>2026-07-23</td>
+<td>初版</td>
+</tr>
+<tr>
+<td>v0.2</td>
+<td>2026-08-10</td>
+<td>contracts(賃貸借契約)新設と空室の導出化、unitsへ敷地権等を追加、moveoutイベント、S-14〜S-18追加、入力面の3層原則(7.9)、P-15〜P-17追加、注意事項にサブスクリプション(返金・解約)を追加</td>
+</tr>
+<tr>
+<td>v0.2.1</td>
+<td>2026-08-10</td>
+<td>設定タブを配当の森v1.1.3のファミリー共通型に再構成(契約状態カード/データ管理アクション/PINロック/利用規約セクション)</td>
+</tr>
+<tr>
+<td>v0.2.2</td>
+<td>2026-08-10</td>
+<td>タブバーを中央ホーム型(ファミリー共通)に変更、分析タブ(S-19)を新設しフリーは🔒プレビュー表示</td>
+</tr>
+<tr>
+<td>v0.2.3</td>
+<td>2026-08-10</td>
+<td>units.assembly_month(総会開催月)を追加。ホームカードに🏛総会月バッジ、基本情報に総会時期、P-18(総会シーズン検知)を新設</td>
+</tr>
+<tr>
+<td>v0.2.4</td>
+<td>2026-08-10</td>
+<td>ホームに「＋物件を追加」カード(S-07への入口・上限到達時はプラン誘導)を追加</td>
+</tr>
+</tbody>
+</table>
+</div></div>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: "neutral",
+    themeVariables: { primaryColor: "#EAF3EA", primaryBorderColor: "#4E9B58",
+      lineColor: "#8C8072", fontFamily: "Hiragino Sans, Noto Sans JP, sans-serif" } });
+</script>
+</body>
+</html>
