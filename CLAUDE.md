@@ -23,6 +23,14 @@ Morincumプロジェクト全体の仕様書・ドキュメントを一元管理
 
 > 家計の森は配当の森と異なり、フロント/バックエンド/バッチをまたぐ親子Issue運用は**行わない**。Issue管理は `kakei_no_mori-frontend` リポジトリ内で完結させる。仕様書のみ本リポジトリ（`specs/kakeinomori/`）に集約する。
 
+### 不動産の森（fudosannomori） — 単一リポジトリ・端末内で完結（予定）
+
+| リポジトリ | 役割 | 技術スタック |
+|---|---|---|
+| **Morincum-fudosan**（仮・未作成） | フロントエンド（iOS/Androidアプリ） | React Native + Expo + TypeScript（予定） |
+
+> データは端末内（SQLite）に持つ。認証（Cognito User Pool に App Client を追加）と課金検証APIだけ Morincum-backend を共用し、新しいAWSリソースは作らない。仕様書は `specs/fudosannomori/` に集約する。
+
 ## 仕様書構成
 
 ```
@@ -34,7 +42,8 @@ specs/
 ├── 050.batch/       # 配当の森: バッチ処理仕様
 ├── 060.infra/       # 配当の森: インフラ・CI/CD
 ├── 100.legal/       # 配当の森: 法的文書（プライバシーポリシー）
-└── kakeinomori/      # 家計の森: プロダクト仕様一式（010.product / 020.system / 030.database）
+├── kakeinomori/      # 家計の森: プロダクト仕様一式（010.product / 020.system / 030.database）
+└── fudosannomori/    # 不動産の森: プロダクト仕様一式（010.product / 020.system / 030.database / design）
 ```
 
 索引は [`specs/README.md`](specs/README.md) を参照してください。

@@ -6,6 +6,7 @@ Morincumブランドファミリー全体の仕様書一覧です。プロダク
 |---|---|---|
 | 配当の森（Morincum） | [`.`](.)（直下の `010.product`〜`100.legal`） | 配当・NISA管理アプリ。フロント/バックエンド/バッチの複数リポジトリ構成 |
 | 家計の森（kakeinomori） | [`kakeinomori/`](kakeinomori/) | クレカ明細のタグ×予算仕分けアプリ。`kakei_no_mori-frontend` 単一リポジトリ・完全オンデバイス |
+| 不動産の森（fudosannomori） | [`fudosannomori/`](fudosannomori/) | 賃貸経営のインカム管理アプリ。端末内で完結（SQLite）。認証・課金検証のみ配当の森と共用 |
 
 ---
 
@@ -87,3 +88,38 @@ Morincumブランドファミリー全体の仕様書一覧です。プロダク
 | ファイル | 説明 |
 |---|---|
 | [frontend-schema.md](kakeinomori/030.database/frontend-schema.md) | 端末内データモデル（CARD_ACCOUNT / IMPORT_BATCH / TRANSACTION / TAG） |
+
+---
+
+## 不動産の森（fudosannomori）
+
+> 状態: モック検証中（実装未着手）。アプリのリポジトリは未作成（`Morincum-fudosan`、仮）
+
+### 010. プロダクト
+
+| ファイル | 説明 |
+|---|---|
+| [product-plan.md](fudosannomori/010.product/product-plan.md) | 企画書（背景・ファミリーでの位置づけ・プラン）・未決事項・変更履歴 |
+| [design-guideline.md](fudosannomori/010.product/design-guideline.md) | デザインガイドライン（配当の森のデザイン体系を継承・テラコッタのアクセント） |
+| [handoff-2026-11-20.md](fudosannomori/010.product/handoff-2026-11-20.md) | 引き継ぎ資料（2026-03〜08 の会話での決定事項・未決事項・次のアクション） |
+| [releases/README.md](fudosannomori/010.product/releases/README.md) | リリース計画とコードネーム（建材の森シリーズ。1.0.0 = Kiso） |
+
+### 020. システム
+
+| ファイル | 説明 |
+|---|---|
+| [ui-spec.md](fudosannomori/020.system/ui-spec.md) | 画面一覧・画面項目一覧 |
+| [internal-processing.md](fudosannomori/020.system/internal-processing.md) | 内部処理一覧（定期ルールの展開・通知など） |
+
+### 030. データベース
+
+| ファイル | 説明 |
+|---|---|
+| [frontend-schema.md](fudosannomori/030.database/frontend-schema.md) | ER図・テーブル定義（端末内 SQLite） |
+
+### デザイン資料
+
+| ファイル | 説明 |
+|---|---|
+| [fudosan-mock-v0.1.jsx](fudosannomori/design/mock/fudosan-mock-v0.1.jsx) | 画面モック v0.1（UIの正） |
+| [fudosan-mori-spec-v0.2.html](fudosannomori/design/fudosan-mori-spec-v0.2.html) | 仕様書 v0.2.4 の Mermaid 描画版（登録時点の原本） |
